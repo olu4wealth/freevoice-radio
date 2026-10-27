@@ -419,6 +419,8 @@ class AudioEngine:
             candidates.append(path[: -len(".wav")] + "_converted.wav")
         else:
             candidates.append(os.path.splitext(path)[0] + "_converted.wav")
+        stem = os.path.splitext(path)[0]
+        candidates.extend(stem + ext for ext in (".jpg", ".jpeg", ".png", ".webp"))
         for candidate in candidates:
             try:
                 if os.path.exists(candidate):

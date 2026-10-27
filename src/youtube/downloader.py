@@ -18,6 +18,8 @@ import json
 import os
 import re
 import threading
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -28,6 +30,7 @@ from src.app_paths import ffmpeg_dir
 
 # Raw containers that may be left behind by the audio conversion.
 SOURCE_EXTS = ("webm", "m4a", "mp4", "opus", "ogg", "aac")
+COVER_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 AUDIO_EXTS = ("mp3", "wav", "flac", "m4a", "ogg", "opus", "aac")
 
 # Maps YouTube video id -> file name inside the download folder.  Keeping
@@ -56,6 +59,7 @@ class YouTubeTrack:
     file_path: Optional[str] = None   # downloaded file (download mode)
     stream_url: Optional[str] = None  # direct URL (stream mode)
     thumbnail: Optional[str] = None
+    cover_path: Optional[str] = None  # saved album art
     source: str = "youtube"
 
 
@@ -204,6 +208,10 @@ class YouTubeDownloader:
         existing = self._find_audio_file(track.id)
         if existing:
             track.file_path = self._migrate_legacy_name(existing, track)
+            _status("Fetching cover art…")
+            track.cover_path = self._download_cover(
+                track, os.path.splitext(track.file_path)[0]
+            )
             _progress({"percent": 100, "downloaded": 1, "total": 1, "phase": "done"})
             _status("Already downloaded")
             return track
@@ -283,6 +291,10 @@ class YouTubeDownloader:
             )
 
         self._remove_source_leftovers(base, file_path)
+        _status("Fetching cover art…")
+        track.cover_path = self._download_cover(
+            track, os.path.join(self.download_path, base)
+        )
         self._index[track.id] = os.path.basename(file_path)
         self._save_index()
 
@@ -374,9 +386,67 @@ class YouTubeDownloader:
             os.replace(path, new_path)
         except OSError:
             return path
+        # Move the cover along with the audio file.
+        for cover_ext in COVER_EXTS:
+            old_cover = os.path.join(self.download_path, stem + cover_ext)
+            new_cover = os.path.join(self.download_path, new_base + cover_ext)
+            if os.path.isfile(old_cover) and not os.path.exists(new_cover):
+                try:
+                    os.replace(old_cover, new_cover)
+                except OSError:
+                    pass
         self._index[track.id] = os.path.basename(new_path)
         self._save_index()
         return new_path
+
+    def _find_cover_file(self, base: str) -> Optional[str]:
+        for ext in COVER_EXTS:
+            candidate = base + ext
+            if os.path.isfile(candidate) and os.path.getsize(candidate) > 1024:
+                return candidate
+        return None
+
+    def _download_cover(self, track: YouTubeTrack, base: str) -> Optional[str]:
+        """Save the YouTube thumbnail next to the audio file as .jpg."""
+        existing = self._find_cover_file(base)
+        if existing:
+            return existing
+
+        urls: list[str] = []
+        if track.thumbnail:
+            urls.append(track.thumbnail)
+        if track.id:
+            urls.extend(
+                [
+                    f"https://i.ytimg.com/vi/{track.id}/maxresdefault.jpg",
+                    f"https://i.ytimg.com/vi/{track.id}/sddefault.jpg",
+                    f"https://i.ytimg.com/vi/{track.id}/hqdefault.jpg",
+                ]
+            )
+
+        target = base + ".jpg"
+        for url in urls:
+            try:
+                request = urllib.request.Request(
+                    url, headers={"User-Agent": "Mozilla/5.0 FreevoiceRadio"}
+                )
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    data = response.read()
+            except (urllib.error.URLError, OSError, ValueError) as exc:
+                print(f"[cover] could not fetch {url}: {exc}")
+                continue
+            # The first candidate is usually WebP; only accept JPEG here so
+            # the cover opens everywhere without extra image plugins.
+            if len(data) < 2000 or not data.startswith(b"\xff\xd8"):
+                continue
+            try:
+                with open(target, "wb") as handle:
+                    handle.write(data)
+                return target
+            except OSError as exc:
+                print(f"[cover] could not save {target}: {exc}")
+                return None
+        return None
 
     def forget_file(self, path: str) -> int:
         """Drop index entries that refer to ``path`` (after a file delete)."""

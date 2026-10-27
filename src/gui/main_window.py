@@ -8,7 +8,7 @@ import time
 import traceback
 from typing import Optional
 
-from PyQt6.QtCore import QPoint, Qt, QThread, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import QPoint, QSize, Qt, QThread, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import (
     QAction,
     QColor,
@@ -164,6 +164,7 @@ class MainWindow(QMainWindow):
         self._metadata: dict[str, dict] = {}
         self._track_history: list[str] = []
         self._max_history = 50
+        self._cover_cache: dict[tuple[str, int], QPixmap] = {}
         self._fetch_thread: Optional[ChannelFetchThread] = None
         self._on_air_state: Optional[str] = None
         self._force_quit = False
@@ -340,6 +341,8 @@ class MainWindow(QMainWindow):
         )
         self.playlist_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.playlist_table.verticalHeader().setVisible(False)
+        self.playlist_table.verticalHeader().setDefaultSectionSize(48)
+        self.playlist_table.setIconSize(QSize(40, 40))
         self.playlist_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Fixed
         )
@@ -620,6 +623,7 @@ class MainWindow(QMainWindow):
                 "artist": entry.get("artist") or "Unknown",
                 "duration": int(entry.get("duration") or 0),
                 "source": entry.get("source") or "local",
+                "cover": entry.get("cover"),
             }
 
         folder = self.config.local_folder
@@ -674,6 +678,7 @@ class MainWindow(QMainWindow):
                     "artist": meta.get("artist") or "Unknown",
                     "duration": int(meta.get("duration") or 0),
                     "source": meta.get("source") or "local",
+                    "cover": meta.get("cover") or self._cover_path(path),
                 }
             )
         self.config.playlist = entries
@@ -685,6 +690,66 @@ class MainWindow(QMainWindow):
 
     def _title_for(self, path: str) -> str:
         return os.path.splitext(os.path.basename(path))[0]
+
+    # ------------------------------------------------------------------
+    # Cover art
+    # ------------------------------------------------------------------
+    def _cover_candidates(self, path: str):
+        meta = self._metadata.get(path) or {}
+        configured = meta.get("cover")
+        if configured and os.path.isfile(configured):
+            yield configured
+
+        stem = os.path.splitext(path)[0]
+        for ext in (".jpg", ".jpeg", ".png", ".webp"):
+            candidate = stem + ext
+            if os.path.isfile(candidate):
+                yield candidate
+
+        folder = os.path.dirname(path)
+        if os.path.normcase(folder) != os.path.normcase(self.config.download_path):
+            for name in ("cover.jpg", "folder.jpg", "album.jpg", "cover.png"):
+                candidate = os.path.join(folder, name)
+                if os.path.isfile(candidate):
+                    yield candidate
+
+    def _cover_path(self, path: str) -> Optional[str]:
+        for candidate in self._cover_candidates(path):
+            if os.path.getsize(candidate) > 0:
+                return candidate
+        return None
+
+    def _cover_pixmap(self, path: str, size: int) -> QPixmap:
+        key = (path, size)
+        if key in self._cover_cache:
+            return self._cover_cache[key]
+        for candidate in self._cover_candidates(path):
+            pixmap = QPixmap(candidate)
+            if pixmap.isNull():
+                continue
+            pixmap = pixmap.scaled(
+                size,
+                size,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            x = max(0, (pixmap.width() - size) // 2)
+            y = max(0, (pixmap.height() - size) // 2)
+            result = pixmap.copy(x, y, size, size)
+            self._cover_cache[key] = result
+            return result
+        empty = QPixmap()
+        self._cover_cache[key] = empty
+        return empty
+
+    def _update_cover_label(self, path: str) -> None:
+        pixmap = self._cover_pixmap(path, 100)
+        if pixmap.isNull():
+            self.cover_label.clear()
+            self.cover_label.setText("No\nCover")
+        else:
+            self.cover_label.setText("")
+            self.cover_label.setPixmap(pixmap)
 
     @staticmethod
     def _is_playable_file(path: str) -> bool:
@@ -712,6 +777,7 @@ class MainWindow(QMainWindow):
             "artist": "YouTube" if source == "youtube" else "Unknown",
             "duration": 0,
             "source": source,
+            "cover": self._cover_path(path),
         }
 
     def _on_playlist_changed(self) -> None:
@@ -737,6 +803,9 @@ class MainWindow(QMainWindow):
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 item.setToolTip(path)
                 self.playlist_table.setItem(row, column, item)
+            cover = self._cover_pixmap(path, 40)
+            if not cover.isNull():
+                self.playlist_table.item(row, 1).setIcon(QIcon(cover))
             if path == current:
                 font = self.playlist_table.item(row, 1).font()
                 font.setBold(True)
@@ -757,6 +826,7 @@ class MainWindow(QMainWindow):
             "Source: YouTube" if source == "youtube" else f"Source: {source}"
         )
         self.setWindowTitle(f"{title} — Freevoice Radio")
+        self._update_cover_label(file_path)
         self._update_transport_buttons()
         self._update_on_air()
         self._refresh_playlist_table()
@@ -864,7 +934,9 @@ class MainWindow(QMainWindow):
             "artist": track.artist or "YouTube",
             "duration": int(track.duration or 0),
             "source": "stream" if item.stream else "youtube",
+            "cover": track.cover_path,
         }
+        self._cover_cache.clear()
         self._engine.add_track(path, stream=item.stream)
         self._refresh_playlist_table()
         self._persist_playlist()
@@ -1418,6 +1490,13 @@ class MainWindow(QMainWindow):
                     os.remove(converted)
                 except OSError:
                     pass
+            for ext in ("jpg", "jpeg", "png", "webp"):
+                cover = os.path.join(folder, f"{stem}.{ext}")
+                if os.path.exists(cover):
+                    try:
+                        os.remove(cover)
+                    except OSError:
+                        pass
             self._yt_downloader.forget_file(path)
         return error
 

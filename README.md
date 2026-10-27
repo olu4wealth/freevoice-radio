@@ -23,6 +23,8 @@ everything plays from local files or downloaded audio on your PC.
 - **Persistent playlist** — Downloads are remembered across restarts
 - **Memory-light streaming** — Long tracks (multi-hour sets) stream from disk instead
   of being decoded into RAM, so they start immediately after download
+- **Album art** — YouTube thumbnails are saved as `<title>.jpg` next to the audio
+  and shown in the now-playing card and playlist
 
 ## Requirements
 
