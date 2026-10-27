@@ -88,7 +88,6 @@ Right-click any row (multi-select works) for:
 | Action | Behaviour |
 |--------|-----------|
 | ▶ Play | Start that track immediately |
-| Show in Folder | Opens Explorer with the file selected |
 | Remove from Playlist | Hides the track but keeps the file. The path is remembered as excluded, so it is not auto-imported again |
 | Delete File from Disk… | Permanently deletes the file after confirmation; downloaded leftovers (`.webm`) and index entries are cleaned up too |
 

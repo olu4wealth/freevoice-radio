@@ -61,25 +61,6 @@ def main() -> None:
     app.setApplicationName("Freevoice Radio")
     app.setOrganizationName("Freevoice")
 
-    # Diagnostic: verify "Show in Folder" without opening the main window.
-    if "--reveal" in sys.argv:
-        from PyQt6.QtCore import QTimer
-
-        from src.shell_open import reveal_in_explorer
-
-        index = sys.argv.index("--reveal")
-        target = sys.argv[index + 1] if index + 1 < len(sys.argv) else ""
-        outcome = {"ok": False}
-
-        def _run_reveal() -> None:
-            outcome["ok"] = reveal_in_explorer(target)
-            print(f"REVEAL ok={outcome['ok']} path={target}")
-            app.quit()
-
-        QTimer.singleShot(0, _run_reveal)
-        app.exec()
-        sys.exit(0 if outcome["ok"] else 1)
-
     try:
         config = Config(config_path=config_path())
         config.save()  # materialise config.json next to the exe on first run

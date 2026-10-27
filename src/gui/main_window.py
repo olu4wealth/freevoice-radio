@@ -48,7 +48,6 @@ from src.app_paths import resolve_path
 from src.audio.engine import AUDIO_EXTENSIONS, AudioEngine
 from src.config import Config
 from src.scheduler.updater import ChannelUpdater
-from src.shell_open import reveal_in_explorer
 from src.youtube.channel_scraper import ChannelScraper, video_id_from_url
 from src.youtube.download_queue import DownloadQueue
 from src.youtube.downloader import YouTubeDownloader, YouTubeTrack
@@ -1322,7 +1321,6 @@ class MainWindow(QMainWindow):
 
         menu = QMenu(self)
         play_action = menu.addAction("▶ Play")
-        reveal_action = menu.addAction("Show in Folder")
         menu.addSeparator()
         remove_action = menu.addAction("Remove from Playlist")
         remove_action.setToolTip("Keep the file on disk, hide it from the playlist")
@@ -1336,8 +1334,6 @@ class MainWindow(QMainWindow):
         chosen = menu.exec(self.playlist_table.viewport().mapToGlobal(position))
         if chosen == play_action:
             self._play_row(row, 0)
-        elif chosen == reveal_action:
-            self._reveal_in_explorer(paths[0])
         elif chosen == remove_action:
             self._remove_tracks(paths)
         elif chosen == delete_action:
@@ -1499,33 +1495,6 @@ class MainWindow(QMainWindow):
                         pass
             self._yt_downloader.forget_file(path)
         return error
-
-    def _reveal_in_explorer(self, path: str) -> None:
-        path = self._normalize(path)
-        if not os.path.exists(path):
-            self.statusBar().showMessage("File no longer exists")
-            return
-        if reveal_in_explorer(path):
-            self.statusBar().showMessage(
-                f"Opened folder: {os.path.dirname(path)}"
-            )
-            return
-
-        # Last resort: show the location in-app instead of spawning Explorer.
-        folder = os.path.dirname(path)
-        box = QMessageBox(self)
-        box.setWindowTitle("Show in Folder")
-        box.setIcon(QMessageBox.Icon.Information)
-        box.setText("Explorer could not be opened automatically.")
-        box.setInformativeText(f"Folder:\n{folder}")
-        copy_button = box.addButton(
-            "Copy Path", QMessageBox.ButtonRole.ActionRole
-        )
-        box.addButton(QMessageBox.StandardButton.Ok)
-        box.exec()
-        if box.clickedButton() is copy_button:
-            QApplication.clipboard().setText(folder)
-            self.statusBar().showMessage("Folder path copied")
 
     def _clear_playlist(self) -> None:
         if not self._engine.playlist():
