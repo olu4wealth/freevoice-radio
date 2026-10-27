@@ -1509,8 +1509,23 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(
                 f"Opened folder: {os.path.dirname(path)}"
             )
-        else:
-            self.statusBar().showMessage("Could not open the containing folder")
+            return
+
+        # Last resort: show the location in-app instead of spawning Explorer.
+        folder = os.path.dirname(path)
+        box = QMessageBox(self)
+        box.setWindowTitle("Show in Folder")
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setText("Explorer could not be opened automatically.")
+        box.setInformativeText(f"Folder:\n{folder}")
+        copy_button = box.addButton(
+            "Copy Path", QMessageBox.ButtonRole.ActionRole
+        )
+        box.addButton(QMessageBox.StandardButton.Ok)
+        box.exec()
+        if box.clickedButton() is copy_button:
+            QApplication.clipboard().setText(folder)
+            self.statusBar().showMessage("Folder path copied")
 
     def _clear_playlist(self) -> None:
         if not self._engine.playlist():
