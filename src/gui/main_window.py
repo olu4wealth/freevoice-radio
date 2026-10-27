@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import time
 import traceback
 from typing import Optional
@@ -49,6 +48,7 @@ from src.app_paths import resolve_path
 from src.audio.engine import AUDIO_EXTENSIONS, AudioEngine
 from src.config import Config
 from src.scheduler.updater import ChannelUpdater
+from src.shell_open import reveal_in_explorer
 from src.youtube.channel_scraper import ChannelScraper, video_id_from_url
 from src.youtube.download_queue import DownloadQueue
 from src.youtube.downloader import YouTubeDownloader, YouTubeTrack
@@ -1505,13 +1505,12 @@ class MainWindow(QMainWindow):
         if not os.path.exists(path):
             self.statusBar().showMessage("File no longer exists")
             return
-        try:
-            if os.name == "nt":
-                subprocess.Popen(f'explorer /select,"{os.path.normpath(path)}"')
-            else:
-                subprocess.Popen(["xdg-open", os.path.dirname(path)])
-        except OSError as exc:
-            self.statusBar().showMessage(f"Could not open folder: {exc}")
+        if reveal_in_explorer(path):
+            self.statusBar().showMessage(
+                f"Opened folder: {os.path.dirname(path)}"
+            )
+        else:
+            self.statusBar().showMessage("Could not open the containing folder")
 
     def _clear_playlist(self) -> None:
         if not self._engine.playlist():
