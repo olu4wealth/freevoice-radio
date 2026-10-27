@@ -1,0 +1,404 @@
+/* Freevoice Radio theme template.
+ *
+ * Colours are @tokens substituted at runtime by MainWindow._apply_theme,
+ * so one stylesheet covers both themes and is applied to the whole app
+ * (dialogs, menus, docks included) instead of only the main window.
+ */
+
+QWidget {
+    background-color: @bg;
+    color: @text;
+    font-family: "Segoe UI", sans-serif;
+    font-size: 10pt;
+}
+
+QMainWindow,
+QDialog {
+    background-color: @bg;
+}
+
+QLabel {
+    background: transparent;
+}
+
+QLabel#trackTitle {
+    font-size: 16pt;
+    font-weight: bold;
+    color: @text_strong;
+}
+
+QLabel#trackArtist {
+    font-size: 11pt;
+    color: @text_muted;
+}
+
+QLabel#trackSource {
+    font-size: 9pt;
+    color: @text_dim;
+}
+
+QLabel#coverArt {
+    background-color: @panel_alt;
+    border: 1px solid @border;
+    border-radius: 4px;
+    color: @text_dim;
+}
+
+QFrame#nowPlayingCard {
+    background-color: @panel;
+    border: 1px solid @border;
+    border-radius: 8px;
+}
+
+QMenuBar {
+    background-color: @bg;
+    color: @text;
+}
+
+QMenuBar::item {
+    background: transparent;
+    padding: 6px 10px;
+}
+
+QMenuBar::item:selected {
+    background-color: @panel_alt;
+    border-radius: 3px;
+}
+
+QPushButton {
+    background-color: @button;
+    border: 1px solid @button_border;
+    border-radius: 4px;
+    padding: 6px 14px;
+    color: @text;
+}
+
+QPushButton:hover {
+    background-color: @button_hover;
+    border-color: @border_strong;
+}
+
+QPushButton:pressed {
+    background-color: @button_pressed;
+}
+
+QPushButton:disabled {
+    color: @text_dim;
+    background-color: @panel_alt;
+}
+
+QPushButton#playButton {
+    background-color: @accent;
+    border: 1px solid @accent_pressed;
+    color: @accent_text;
+    font-weight: bold;
+    padding: 8px 18px;
+}
+
+QPushButton#playButton:hover {
+    background-color: @accent_hover;
+}
+
+QPushButton#playButton:pressed {
+    background-color: @accent_pressed;
+}
+
+QPushButton[active="true"] {
+    background-color: @accent;
+    border-color: @accent_pressed;
+    color: @accent_text;
+}
+
+QPushButton[active="true"]:hover {
+    background-color: @accent_hover;
+}
+
+QTableWidget {
+    background-color: @panel;
+    alternate-background-color: @panel_alt;
+    border: 1px solid @border;
+    gridline-color: @border;
+    color: @text;
+    selection-background-color: @selection;
+    selection-color: @selection_text;
+    outline: 0;
+}
+
+QAbstractItemView {
+    outline: 0;
+}
+
+QTableWidget::item {
+    padding: 6px;
+    border: none;
+}
+
+QTableWidget::item:selected {
+    background-color: @selection;
+    color: @selection_text;
+}
+
+QHeaderView::section {
+    background-color: @panel_alt;
+    color: @text;
+    border: 1px solid @border;
+    padding: 7px 6px;
+    font-weight: bold;
+}
+
+QTableCornerButton::section {
+    background-color: @panel_alt;
+    border: 1px solid @border;
+}
+
+QSlider::groove:horizontal {
+    height: 6px;
+    background: @panel_alt;
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    background: @accent;
+    width: 14px;
+    height: 14px;
+    margin: -4px 0;
+    border-radius: 7px;
+}
+
+QSlider::handle:horizontal:hover {
+    background: @accent_hover;
+}
+
+QComboBox {
+    background-color: @panel;
+    border: 1px solid @border_strong;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: @text;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: @panel;
+    color: @text;
+    border: 1px solid @border;
+    selection-background-color: @selection;
+    selection-color: @selection_text;
+}
+
+QLineEdit,
+QSpinBox,
+QDoubleSpinBox,
+QTextEdit,
+QPlainTextEdit {
+    background-color: @panel;
+    border: 1px solid @border_strong;
+    border-radius: 4px;
+    padding: 4px 6px;
+    color: @text;
+    selection-background-color: @selection;
+    selection-color: @selection_text;
+}
+
+QGroupBox {
+    border: 1px solid @border;
+    border-radius: 4px;
+    margin-top: 10px;
+    padding-top: 8px;
+    color: @text;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 4px;
+    color: @text;
+}
+
+QCheckBox {
+    color: @text;
+    spacing: 6px;
+    background: transparent;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    background-color: @panel;
+    border: 1px solid @border_strong;
+    border-radius: 3px;
+}
+
+QCheckBox::indicator:checked {
+    background-color: @accent;
+    border-color: @accent;
+    image: url("@gui_dir/check.png");
+}
+
+QTableView::indicator {
+    width: 16px;
+    height: 16px;
+    background-color: @panel;
+    border: 1px solid @border_strong;
+    border-radius: 3px;
+}
+
+QTableView::indicator:checked {
+    background-color: @accent;
+    border-color: @accent;
+    image: url("@gui_dir/check.png");
+}
+
+QSpinBox::up-button,
+QSpinBox::down-button,
+QDoubleSpinBox::up-button,
+QDoubleSpinBox::down-button {
+    width: 0px;
+    height: 0px;
+    border: none;
+}
+
+QTabWidget::pane {
+    border: 1px solid @border;
+    border-radius: 4px;
+    background-color: @bg;
+}
+
+QTabBar::tab {
+    background-color: @panel_alt;
+    color: @text_muted;
+    border: 1px solid @border;
+    border-bottom: none;
+    padding: 6px 14px;
+    margin-right: 2px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+
+QTabBar::tab:selected {
+    background-color: @panel;
+    color: @text_strong;
+}
+
+QStatusBar {
+    background-color: @panel;
+    color: @text_muted;
+    border-top: 1px solid @border;
+}
+
+QLabel#onAir {
+    font-size: 9pt;
+    font-weight: bold;
+    color: @text_dim;
+    padding: 2px 6px;
+}
+
+QLabel#onAir[onair="true"] {
+    color: @onair;
+}
+
+QLabel#trackTime {
+    color: @text_muted;
+    font-size: 9pt;
+}
+
+QProgressBar#trackProgress {
+    background-color: @panel_alt;
+    border: none;
+    border-radius: 3px;
+}
+
+QProgressBar#trackProgress::chunk {
+    background-color: @accent;
+    border-radius: 3px;
+}
+
+QMenu {
+    background-color: @panel;
+    border: 1px solid @border;
+    color: @text;
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 6px 24px 6px 12px;
+    border-radius: 3px;
+}
+
+QMenu::item:selected {
+    background-color: @accent;
+    color: @accent_text;
+}
+
+QMenu::item:disabled {
+    color: @text_dim;
+}
+
+QMenu::separator {
+    height: 1px;
+    background: @border;
+    margin: 4px 8px;
+}
+
+QDockWidget {
+    color: @text;
+}
+
+QDockWidget::title {
+    background-color: @panel_alt;
+    border: 1px solid @border;
+    padding: 6px;
+}
+
+QToolTip {
+    background-color: @panel;
+    color: @text;
+    border: 1px solid @border_strong;
+    padding: 4px;
+}
+
+QScrollBar:vertical {
+    background: @bg;
+    width: 12px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: @scrollbar;
+    min-height: 30px;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: @scrollbar_hover;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar:horizontal {
+    background: @bg;
+    height: 12px;
+    margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+    background: @scrollbar;
+    min-width: 30px;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: @scrollbar_hover;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+}

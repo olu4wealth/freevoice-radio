@@ -1,0 +1,49 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ---- Build output / executables ----
+build/
+dist/
+*.exe
+ffmpeg.exe
+ffprobe.exe
+
+# ---- Downloaded audio and music ----
+downloads/
+**/downloads/
+*.mp3
+*.m4a
+*.aac
+*.wav
+*.flac
+*.ogg
+*.opus
+*.webm
+*.mp4
+*.part
+.freevoice_index.json
+**/.freevoice_index.json
+
+# ---- Runtime / user-specific data ----
+config.json
+config.*.json
+freevoice.log
+*.log
+
+# ---- Local scratch ----
+fix_download.py
+
+# ---- OS / editor ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.swp
