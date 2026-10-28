@@ -1288,10 +1288,6 @@ class MainWindow(QMainWindow):
             event.ignore()
             self._minimize_to_tray()
             return
-        if action == "taskbar":
-            event.ignore()
-            self._minimize_to_taskbar()
-            return
         if action == "quit":
             self._shutdown()
             event.accept()
@@ -1304,9 +1300,6 @@ class MainWindow(QMainWindow):
         if choice == "tray":
             event.ignore()
             self._minimize_to_tray()
-        elif choice == "taskbar":
-            event.ignore()
-            self._minimize_to_taskbar()
         elif choice == "quit":
             self._shutdown()
             event.accept()
@@ -1329,9 +1322,6 @@ class MainWindow(QMainWindow):
         tray_button = box.addButton(
             "Minimize to Tray", QMessageBox.ButtonRole.AcceptRole
         )
-        taskbar_button = box.addButton(
-            "Minimize to Taskbar", QMessageBox.ButtonRole.ActionRole
-        )
         box.addButton("Close App", QMessageBox.ButtonRole.DestructiveRole)
         cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
         remember = QCheckBox("Remember my choice")
@@ -1344,8 +1334,6 @@ class MainWindow(QMainWindow):
             return None
         if clicked is tray_button:
             action = "tray"
-        elif clicked is taskbar_button:
-            action = "taskbar"
         else:
             action = "quit"
         if remember.isChecked():
@@ -1373,11 +1361,6 @@ class MainWindow(QMainWindow):
             QSystemTrayIcon.MessageIcon.Information,
             6000,
         )
-
-    def _minimize_to_taskbar(self) -> None:
-        self.showMinimized()
-        self.tray.show()
-        self.statusBar().showMessage("Still on air — minimized to the taskbar")
 
     def _shutdown(self) -> None:
         if self._shut_down:

@@ -198,7 +198,6 @@ class SettingsDialog(QDialog):
             [
                 "Ask every time",
                 "Minimize to tray and keep playing",
-                "Minimize to taskbar and keep playing",
                 "Close the app",
             ]
         )
@@ -243,7 +242,7 @@ class SettingsDialog(QDialog):
         self.theme_combo.setCurrentIndex(theme_map.get(cfg.theme, 0))
         self.autoplay_chk.setChecked(cfg.autoplay)
         self.startup_chk.setChecked(is_startup_enabled())
-        close_map = {"ask": 0, "tray": 1, "taskbar": 2, "quit": 3}
+        close_map = {"ask": 0, "tray": 1, "quit": 2}
         self.close_combo.setCurrentIndex(close_map.get(cfg.close_action, 0))
         self.sched_chk.setChecked(cfg.scheduler_enabled)
         self.sched_spin.setValue(cfg.scheduler_interval_minutes)
@@ -267,7 +266,7 @@ class SettingsDialog(QDialog):
         theme_map = {0: "dark", 1: "light", 2: "system"}
         cfg.theme = theme_map[self.theme_combo.currentIndex()]
         cfg.autoplay = self.autoplay_chk.isChecked()
-        close_map = {0: "ask", 1: "tray", 2: "taskbar", 3: "quit"}
+        close_map = {0: "ask", 1: "tray", 2: "quit"}
         cfg.close_action = close_map[self.close_combo.currentIndex()]
         cfg.scheduler_enabled = self.sched_chk.isChecked()
         cfg.scheduler_interval_minutes = self.sched_spin.value()

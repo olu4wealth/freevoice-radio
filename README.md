@@ -162,8 +162,6 @@ working.
 Clicking the window's close button asks what to do:
 
 - **Minimize to Tray** — keeps the radio playing; find it via the tray icon.
-- **Minimize to Taskbar** — keeps the radio playing and leaves a normal
-  taskbar button, useful if the tray icon is hidden by Windows.
 - **Close App** — stops playback and exits.
 - **Remember my choice** — stores the answer; change it later under
   Settings → General → *When I click the close button*.
@@ -281,7 +279,7 @@ freevoice-radio/
 | Download reaches 100% but nothing plays | Fixed in this version: the completion handler now adds the track and starts playback. If it still happens, check `freevoice.log` next to the exe. |
 | "ffmpeg not found" / download fails after 100% | Put `ffmpeg.exe` and `ffprobe.exe` next to `Freevoice Radio.exe` (or install ffmpeg and add it to `PATH`). |
 | No sound at all | Open `python main.py --selftest --audible`; if it fails, Windows audio output or the QtMultimedia plugin is unavailable. |
-| App is playing but I can't find the window | Start Freevoice Radio again — the single-instance guard restores the hidden window. Then use the tray icon or set the close button to **Minimize to Taskbar**. |
+| App is playing but I can't find the window | Start Freevoice Radio again — the single-instance guard restores the hidden window. Then use the tray icon. |
 | Tray icon missing from the **^** overflow | Windows Settings → Personalization → Taskbar → **Other system tray icons** → enable Freevoice Radio. Settings → General also has a button that opens this page. |
 | Closing the window hid the app instead of exiting | That is the close-button choice. Set Settings → General → *When I click the close button* to **Close the app**, or use File → Exit / tray → Quit. |
 | `Failed to load Python DLL` / missing files | Keep `Freevoice Radio.exe` and the `_internal` folder together. Do not copy the exe on its own. |
