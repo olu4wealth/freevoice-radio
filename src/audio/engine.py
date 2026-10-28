@@ -199,6 +199,58 @@ class AudioEngine:
     def duration(self) -> float:
         return self.backend.get_duration()
 
+    def seek(self, seconds: float) -> None:
+        """Jump to a position in the current track."""
+        with self._lock:
+            if self._is_playing or self._is_paused:
+                self.backend.set_position(max(0.0, float(seconds)))
+
+    def peek_next_path(self) -> Optional[str]:
+        """Return the track that will play next, if it can be known."""
+        with self._lock:
+            if not self._playlist:
+                return None
+            if self._loop_mode == "one" and self.current_track():
+                return self.current_track()
+            if self._shuffle:
+                if self._shuffle_bag:
+                    index = self._shuffle_bag[-1]
+                    if 0 <= index < len(self._playlist):
+                        return self._playlist[index]
+                return None
+            if self._index < 0:
+                return self._playlist[0]
+            index = self._index + 1
+            if index >= len(self._playlist):
+                if self._loop_mode == "off":
+                    return None
+                index = 0
+            return self._playlist[index]
+
+    def move_track(self, path: str, offset: int) -> bool:
+        """Move a track up/down in the playlist without stopping playback."""
+        with self._lock:
+            if path not in self._playlist:
+                return False
+            old_index = self._playlist.index(path)
+            new_index = max(0, min(len(self._playlist) - 1, old_index + offset))
+            if new_index == old_index:
+                return False
+
+            item = self._playlist.pop(old_index)
+            self._playlist.insert(new_index, item)
+
+            if self._index == old_index:
+                self._index = new_index
+            elif old_index < self._index <= new_index:
+                self._index -= 1
+            elif new_index <= self._index < old_index:
+                self._index += 1
+
+            self._reset_shuffle()
+            self._notify_playlist_changed()
+            return True
+
     # ------------------------------------------------------------------
     # Settings
     # ------------------------------------------------------------------

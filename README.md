@@ -25,6 +25,8 @@ everything plays from local files or downloaded audio on your PC.
   of being decoded into RAM, so they start immediately after download
 - **Album art** — YouTube thumbnails are saved as `<title>.jpg` next to the audio
   and shown in the now-playing card and playlist
+- **Seekable playback** — click or drag the progress bar to jump in a track
+- **Library tools** — drag-and-drop, search/filter, reorder, Up Next
 
 ## Requirements
 
@@ -78,7 +80,8 @@ The built executable supports the same flags and appends the output to
 | 🔁 Repeat All / One / Off | Cycles repeat mode. Repeat One loops the current track; Off stops after the playlist has played through once. |
 | 🔀 Shuffle | Independent toggle. Plays the playlist in random order without repeating a track until the round is finished. |
 | ● ON AIR | Turns red while audio is playing, shows STANDBY when paused. |
-| Progress / time | Shows elapsed and total time for the current track. |
+| Progress / time | Click or drag the bar to seek; shows elapsed and total time. |
+| Up next | Shows the next track (or “Shuffle” when the order is random). |
 | Auto-start | Starts playback when the app opens (can be disabled in Settings). |
 
 ### Playlist right-click menu
@@ -88,11 +91,20 @@ Right-click any row (multi-select works) for:
 | Action | Behaviour |
 |--------|-----------|
 | ▶ Play | Start that track immediately |
+| Copy Path | Copies the full file path to the clipboard |
 | Download Cover Art | Fetches the YouTube thumbnail for a track that has no cover yet |
 | Remove from Playlist | Hides the track but keeps the file. The path is remembered as excluded, so it is not auto-imported again |
 | Delete File from Disk… | Permanently deletes the file after confirmation; downloaded leftovers (`.webm`) and index entries are cleaned up too |
 
 Shortcuts: `Delete` removes selected rows from the playlist, `Shift+Delete` deletes the files.
+
+### Searching, reordering and drag-and-drop
+
+- The **Search** box filters by title, artist and source as you type.
+- **Move Up / Move Down** (or `Alt+Up` / `Alt+Down`) reorders the playlist.
+- Drag audio files or folders from Explorer onto the window to add them.
+- **Up next** in the now-playing card shows the next track; with shuffle on it
+  shows “Shuffle” when the random order is not yet decided.
 
 ### Download queue
 

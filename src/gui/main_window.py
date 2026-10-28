@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -122,6 +123,49 @@ def _format_clock(seconds: float) -> str:
     if hours:
         return f"{hours}:{minutes:02d}:{secs:02d}"
     return f"{minutes}:{secs:02d}"
+
+
+class SeekSlider(QSlider):
+    """Horizontal slider that jumps to the clicked position."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(Qt.Orientation.Horizontal, parent)
+        self.setObjectName("seekSlider")
+        self.setRange(0, 0)
+        self.setSingleStep(1000)
+        self.setPageStep(10000)
+        self.setTracking(True)
+
+    def _value_at(self, x: float) -> int:
+        return QStyle.sliderValueFromPosition(
+            self.minimum(),
+            self.maximum(),
+            int(max(0, min(x, self.width()))),
+            max(1, self.width()),
+        )
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 (Qt API)
+        if event.button() == Qt.MouseButton.LeftButton and self.maximum() > 0:
+            self.setSliderDown(True)
+            self.setValue(self._value_at(event.position().x()))
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802 (Qt API)
+        if self.isSliderDown() and self.maximum() > 0:
+            self.setValue(self._value_at(event.position().x()))
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 (Qt API)
+        if self.isSliderDown():
+            self.setValue(self._value_at(event.position().x()))
+            self.setSliderDown(False)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
 
 class ChannelFetchThread(QThread):
@@ -270,6 +314,7 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         self.setWindowTitle("Freevoice Radio")
         self.resize(960, 640)
+        self.setAcceptDrops(True)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -342,9 +387,12 @@ class MainWindow(QMainWindow):
         self.artist_label.setObjectName("trackArtist")
         self.source_label = QLabel("Source: —")
         self.source_label.setObjectName("trackSource")
+        self.next_label = QLabel("Up next: —")
+        self.next_label.setObjectName("trackNext")
         info_layout.addWidget(self.title_label)
         info_layout.addWidget(self.artist_label)
         info_layout.addWidget(self.source_label)
+        info_layout.addWidget(self.next_label)
         info_layout.addStretch()
         np_layout.addLayout(info_layout, stretch=1)
 
@@ -358,6 +406,26 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self.now_playing_card)
 
+        # ---- Playlist search / reorder ----
+        playlist_tools = QHBoxLayout()
+        playlist_tools.addWidget(QLabel("Search:"))
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Filter by title, artist or source…")
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.setAcceptDrops(False)
+        self.search_edit.textChanged.connect(self._on_search_changed)
+        playlist_tools.addWidget(self.search_edit, stretch=1)
+
+        self.btn_move_up = QPushButton("Move Up")
+        self.btn_move_up.setToolTip("Move the selected track up (Alt+Up)")
+        self.btn_move_up.clicked.connect(lambda: self._move_selected(-1))
+        self.btn_move_down = QPushButton("Move Down")
+        self.btn_move_down.setToolTip("Move the selected track down (Alt+Down)")
+        self.btn_move_down.clicked.connect(lambda: self._move_selected(1))
+        playlist_tools.addWidget(self.btn_move_up)
+        playlist_tools.addWidget(self.btn_move_down)
+        layout.addLayout(playlist_tools)
+
         # ---- Playlist table ----
         self.playlist_table = QTableWidget(0, 5)
         self.playlist_table.setHorizontalHeaderLabels(
@@ -370,6 +438,8 @@ class MainWindow(QMainWindow):
             QTableWidget.SelectionBehavior.SelectRows
         )
         self.playlist_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.playlist_table.setAcceptDrops(False)
+        self.playlist_table.setDragDropMode(QTableWidget.DragDropMode.NoDragDrop)
         self.playlist_table.verticalHeader().setVisible(False)
         self.playlist_table.verticalHeader().setDefaultSectionSize(48)
         self.playlist_table.setIconSize(QSize(40, 40))
@@ -392,19 +462,25 @@ class MainWindow(QMainWindow):
             QKeySequence("Shift+Delete"), self.playlist_table
         )
         self._delete_shortcut.activated.connect(self._delete_selected_tracks)
+        self._move_up_shortcut = QShortcut(
+            QKeySequence("Alt+Up"), self.playlist_table
+        )
+        self._move_up_shortcut.activated.connect(lambda: self._move_selected(-1))
+        self._move_down_shortcut = QShortcut(
+            QKeySequence("Alt+Down"), self.playlist_table
+        )
+        self._move_down_shortcut.activated.connect(lambda: self._move_selected(1))
         layout.addWidget(self.playlist_table, stretch=1)
 
         # ---- Track progress / air-time ----
         progress_row = QHBoxLayout()
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setObjectName("trackProgress")
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(6)
+        self.seek_slider = SeekSlider()
+        self.seek_slider.setEnabled(False)
+        self.seek_slider.setFixedHeight(18)
+        self.seek_slider.valueChanged.connect(self._on_seek_changed)
         self.time_label = QLabel("0:00 / 0:00")
         self.time_label.setObjectName("trackTime")
-        progress_row.addWidget(self.progress_bar, stretch=1)
+        progress_row.addWidget(self.seek_slider, stretch=1)
         progress_row.addWidget(self.time_label)
         layout.addLayout(progress_row)
 
@@ -905,6 +981,11 @@ class MainWindow(QMainWindow):
                 font.setBold(True)
                 self.playlist_table.item(row, 1).setFont(font)
 
+            term = self.search_edit.text().strip().lower()
+            visible = not term or any(term in str(value).lower() for value in values)
+            self.playlist_table.setRowHidden(row, not visible)
+        self._update_next_label()
+
     def _on_track_changed(self, file_path: str) -> None:
         if file_path in self._track_history:
             self._track_history.remove(file_path)
@@ -1310,6 +1391,7 @@ class MainWindow(QMainWindow):
         self._set_button_active(self.btn_shuffle, shuffle)
 
         self._update_play_button_text()
+        self._update_next_label()
 
     def _cycle_loop_mode(self) -> None:
         order = ["all", "one", "off"]
@@ -1357,15 +1439,123 @@ class MainWindow(QMainWindow):
         duration = self._engine.duration()
         position = self._engine.position()
         if duration > 0:
-            self.progress_bar.setRange(0, int(duration))
-            self.progress_bar.setValue(min(int(position), int(duration)))
-            self.time_label.setText(
-                f"{_format_clock(position)} / {_format_clock(duration)}"
-            )
+            if not self.seek_slider.isSliderDown():
+                self.seek_slider.blockSignals(True)
+                self.seek_slider.setRange(0, int(duration * 1000))
+                self.seek_slider.setValue(min(int(position * 1000), int(duration * 1000)))
+                self.seek_slider.blockSignals(False)
+                self.time_label.setText(
+                    f"{_format_clock(position)} / {_format_clock(duration)}"
+                )
+            self.seek_slider.setEnabled(True)
         else:
-            self.progress_bar.setRange(0, 100)
-            self.progress_bar.setValue(0)
-            self.time_label.setText("0:00 / 0:00")
+            if not self.seek_slider.isSliderDown():
+                self.seek_slider.blockSignals(True)
+                self.seek_slider.setRange(0, 0)
+                self.seek_slider.setValue(0)
+                self.seek_slider.blockSignals(False)
+                self.time_label.setText("0:00 / 0:00")
+            self.seek_slider.setEnabled(False)
+        self._update_next_label()
+
+    def _on_seek_changed(self, value: int) -> None:
+        duration = self._engine.duration()
+        if duration <= 0:
+            return
+        self.time_label.setText(
+            f"{_format_clock(value / 1000.0)} / {_format_clock(duration)}"
+        )
+        self._engine.seek(value / 1000.0)
+
+    def _update_next_label(self) -> None:
+        if not hasattr(self, "next_label"):
+            return
+        if not (self._engine.is_playing() or self._engine.is_paused()):
+            self.next_label.setText("Up next: —")
+            return
+        path = self._engine.peek_next_path()
+        if path:
+            meta = self._metadata.get(path) or self._local_metadata(path)
+            title = meta.get("title") or self._title_for(path)
+            if len(title) > 80:
+                title = title[:77] + "…"
+            self.next_label.setText(f"Up next: {title}")
+            self.next_label.setToolTip(path)
+        elif self._engine.shuffle_enabled() and self._engine.playlist():
+            self.next_label.setText("Up next: Shuffle")
+        else:
+            self.next_label.setText("Up next: —")
+
+    def _on_search_changed(self, _text: str) -> None:
+        self._refresh_playlist_table()
+
+    def _move_selected(self, offset: int) -> None:
+        paths = self._selected_paths()
+        if not paths:
+            self.statusBar().showMessage("Select a track to reorder")
+            return
+        path = paths[0]
+        if not self._engine.move_track(path, offset):
+            self.statusBar().showMessage("Track is already at the end")
+            return
+        index = self._engine.playlist().index(path)
+        self._refresh_playlist_table()
+        if 0 <= index < self.playlist_table.rowCount() and not self.playlist_table.isRowHidden(index):
+            self.playlist_table.selectRow(index)
+        title = (self._metadata.get(path) or {}).get("title") or self._title_for(path)
+        self.statusBar().showMessage(f"Moved: {title}")
+
+    # ------------------------------------------------------------------
+    # Drag and drop
+    # ------------------------------------------------------------------
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 (Qt API)
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802 (Qt API)
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:  # noqa: N802 (Qt API)
+        paths = [
+            url.toLocalFile()
+            for url in event.mimeData().urls()
+            if url.isLocalFile()
+        ]
+        if paths:
+            self._add_local_paths(paths)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def _add_local_paths(self, raw_paths: list[str]) -> None:
+        added = 0
+        for raw in raw_paths:
+            path = self._normalize(raw)
+            if os.path.isdir(path):
+                candidates = [
+                    self._normalize(os.path.join(path, name))
+                    for name in sorted(os.listdir(path))
+                ]
+            else:
+                candidates = [path]
+            for candidate in candidates:
+                if not self._is_playable_file(candidate) or not os.path.isfile(candidate):
+                    continue
+                self.config.include(candidate)
+                self._metadata.setdefault(candidate, self._local_metadata(candidate))
+                if self._engine.add_track(candidate):
+                    added += 1
+        self._refresh_playlist_table()
+        self._persist_playlist()
+        if added:
+            self.statusBar().showMessage(f"Added {added} track(s) from drop")
+        else:
+            self.statusBar().showMessage("No supported audio files in the drop")
 
     def _autostart_playback(self) -> None:
         """Start the radio automatically when the app opens."""
@@ -1422,6 +1612,7 @@ class MainWindow(QMainWindow):
 
         menu = QMenu(self)
         play_action = menu.addAction("▶ Play")
+        copy_action = menu.addAction("Copy Path")
         cover_action = None
         if len(paths) == 1 and not self._cover_path(paths[0]):
             cover_action = menu.addAction("Download Cover Art")
@@ -1438,6 +1629,9 @@ class MainWindow(QMainWindow):
         chosen = menu.exec(self.playlist_table.viewport().mapToGlobal(position))
         if chosen == play_action:
             self._play_row(row, 0)
+        elif chosen == copy_action:
+            QApplication.clipboard().setText(paths[0])
+            self.statusBar().showMessage("Path copied")
         elif cover_action is not None and chosen == cover_action:
             self._download_cover_art(paths[0])
         elif chosen == remove_action:

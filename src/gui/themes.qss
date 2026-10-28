@@ -306,6 +306,38 @@ QLabel#trackTime {
     font-size: 9pt;
 }
 
+QLabel#trackNext {
+    color: @text_muted;
+    font-size: 9pt;
+}
+
+QSlider#seekSlider::groove:horizontal {
+    height: 8px;
+    background: @panel_alt;
+    border-radius: 4px;
+}
+
+QSlider#seekSlider::sub-page:horizontal {
+    background: @accent;
+    border-radius: 4px;
+}
+
+QSlider#seekSlider::handle:horizontal {
+    background: @accent;
+    width: 12px;
+    height: 12px;
+    margin: -2px 0;
+    border-radius: 6px;
+}
+
+QSlider#seekSlider::handle:horizontal:hover {
+    background: @accent_hover;
+}
+
+QSlider#seekSlider:disabled::groove:horizontal {
+    background: @panel_alt;
+}
+
 QProgressBar#trackProgress {
     background-color: @panel_alt;
     border: none;

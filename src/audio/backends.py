@@ -101,6 +101,16 @@ class MediaBackend(QObject):
         duration = self._player.duration()
         return duration / 1000.0 if duration and duration > 0 else 0.0
 
+    def set_position(self, seconds: float) -> None:
+        """Seek within the current track."""
+        if self._player.source().isEmpty():
+            return
+        duration = self._player.duration()
+        position = max(0, int(seconds * 1000))
+        if duration and duration > 0:
+            position = min(position, duration)
+        self._player.setPosition(position)
+
     # ------------------------------------------------------------------
     # Playback
     # ------------------------------------------------------------------
@@ -335,6 +345,9 @@ class NullBackend(QObject):
 
     def get_duration(self) -> float:
         return 0.0
+
+    def set_position(self, seconds: float) -> None:
+        pass
 
     def set_volume(self, volume: int) -> None:
         pass
