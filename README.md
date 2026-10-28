@@ -21,6 +21,7 @@ everything plays from local files or downloaded audio on your PC.
 - **Track history** — Last 50 played tracks recorded automatically
 - **Auto-cleanup** — Deletes downloaded files older than 48 hours not in the playlist
 - **Persistent playlist** — Downloads are remembered across restarts
+- **Resume playback** — On launch, continues the last track from where it stopped
 - **Memory-light streaming** — Long tracks (multi-hour sets) stream from disk instead
   of being decoded into RAM, so they start immediately after download
 - **Album art** — YouTube thumbnails are saved as `<title>.jpg` next to the audio
@@ -170,6 +171,18 @@ Downloaded YouTube files are named after the video title, e.g.
 `SOAK IN HIS PRESENCE A Powerful Worship Experience.mp3`. A hidden
 `downloads/.freevoice_index.json` remembers which video each file came from,
 so re-adding a URL does not download it twice. Name collisions get ` (2)`.
+
+### Resuming playback
+
+The app remembers the current track and position in `config.json`
+(`resume_track` and `resume_position`). It saves every 10 seconds, on track
+changes, on pause/stop, and when the app closes. On the next launch it opens
+that track and seeks back to the saved position. If the file was deleted it
+falls back to the first track in the playlist.
+
+This only starts audio automatically when **Autoplay** is enabled in Settings.
+Pressing **Stop** saves position `0:00`; closing while playing or paused saves
+the current position.
 
 ## Configuration
 

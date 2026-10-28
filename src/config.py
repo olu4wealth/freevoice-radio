@@ -20,6 +20,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "local_folder": None,
     "playlist": [],
     "excluded": [],
+    "resume_track": "",
+    "resume_position": 0.0,
     "loop_mode": "loop_all",
     "shuffle": False,
     "autoplay": True,
@@ -152,6 +154,25 @@ class Config:
     @autoplay.setter
     def autoplay(self, value: bool) -> None:
         self._data["autoplay"] = bool(value)
+
+    @property
+    def resume_track(self) -> str:
+        return str(self._data.get("resume_track") or "")
+
+    @resume_track.setter
+    def resume_track(self, value: str) -> None:
+        self._data["resume_track"] = value or ""
+
+    @property
+    def resume_position(self) -> float:
+        try:
+            return max(0.0, float(self._data.get("resume_position") or 0.0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    @resume_position.setter
+    def resume_position(self, value: float) -> None:
+        self._data["resume_position"] = max(0.0, float(value or 0.0))
 
     @property
     def gapless(self) -> bool:

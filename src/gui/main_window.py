@@ -243,6 +243,9 @@ class MainWindow(QMainWindow):
         self._force_quit = False
         self._shut_down = False
         self._current_theme = "dark"
+        self._resume_position_pending: Optional[float] = None
+        self._last_saved_resume: tuple[str, int] | None = None
+        self._last_track_path = ""
 
         self._engine = AudioEngine(
             download_path=self.config.download_path,
@@ -282,6 +285,15 @@ class MainWindow(QMainWindow):
         self._ui_timer.timeout.connect(self._tick_ui)
         self._ui_timer.start()
         self._tick_ui()
+
+        self._save_timer = QTimer(self)
+        self._save_timer.setInterval(10000)
+        self._save_timer.timeout.connect(self._save_resume_state)
+        self._save_timer.start()
+
+        self._resume_timer = QTimer(self)
+        self._resume_timer.setInterval(100)
+        self._resume_timer.timeout.connect(self._apply_pending_resume)
 
         # A radio should already be on air when it opens.
         if self.config.autoplay and self._engine.playlist():
@@ -991,6 +1003,12 @@ class MainWindow(QMainWindow):
             self._track_history.remove(file_path)
         self._track_history.insert(0, file_path)
         self._track_history = self._track_history[: self._max_history]
+        self._last_track_path = file_path
+        if (
+            self._resume_position_pending is not None
+            and file_path != self.config.resume_track
+        ):
+            self._resume_position_pending = None
 
         meta = self._metadata.get(file_path) or self._local_metadata(file_path)
         title = meta.get("title") or self._title_for(file_path)
@@ -1005,6 +1023,8 @@ class MainWindow(QMainWindow):
         self._update_transport_buttons()
         self._update_on_air()
         self._refresh_playlist_table()
+        if self._resume_position_pending is None:
+            self._save_resume_state(force=True)
 
     def _on_playback_stopped(self) -> None:
         self.btn_play.setText("▶ Play")
@@ -1316,6 +1336,10 @@ class MainWindow(QMainWindow):
         except Exception:
             traceback.print_exc()
         try:
+            self._save_resume_state(force=True)
+        except Exception:
+            traceback.print_exc()
+        try:
             self._engine.quit()
         except Exception:
             traceback.print_exc()
@@ -1347,6 +1371,7 @@ class MainWindow(QMainWindow):
         self._update_transport_buttons()
         self._update_on_air()
         self._refresh_playlist_table()
+        self._save_resume_state(force=True)
         self.statusBar().showMessage(
             "Paused" if self._engine.is_paused() else
             ("Playing" if self._engine.is_playing() else "Stopped")
@@ -1434,10 +1459,32 @@ class MainWindow(QMainWindow):
         self.on_air_label.style().unpolish(self.on_air_label)
         self.on_air_label.style().polish(self.on_air_label)
 
+    def _apply_pending_resume(self) -> None:
+        if self._resume_position_pending is None:
+            self._resume_timer.stop()
+            return
+        duration = self._engine.duration()
+        if duration <= 0:
+            return
+        target = min(
+            self._resume_position_pending, max(0.0, duration - 1.0)
+        )
+        self._engine.seek(target)
+        self._resume_position_pending = None
+        self._resume_timer.stop()
+        self.statusBar().showMessage(
+            f"Resumed at {_format_clock(target)}", 4000
+        )
+
     def _tick_ui(self) -> None:
         self._update_on_air()
         duration = self._engine.duration()
         position = self._engine.position()
+        if self._resume_position_pending is not None and duration > 0:
+            target = min(self._resume_position_pending, max(0.0, duration - 1.0))
+            self._engine.seek(target)
+            position = target
+            self._resume_position_pending = None
         if duration > 0:
             if not self.seek_slider.isSliderDown():
                 self.seek_slider.blockSignals(True)
@@ -1459,6 +1506,9 @@ class MainWindow(QMainWindow):
         self._update_next_label()
 
     def _on_seek_changed(self, value: int) -> None:
+        if self._resume_position_pending is not None:
+            self._resume_timer.stop()
+        self._resume_position_pending = None
         duration = self._engine.duration()
         if duration <= 0:
             return
@@ -1558,31 +1608,81 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("No supported audio files in the drop")
 
     def _autostart_playback(self) -> None:
-        """Start the radio automatically when the app opens."""
+        """Start the radio automatically, resuming the last track/position."""
         if self._shut_down:
             return
         if self._engine.is_playing() or self._engine.is_paused():
             return
-        if self._engine.play():
+        if not self._engine.playlist():
+            self.statusBar().showMessage("Add music to go on air")
+            return
+
+        resume_path = self.config.resume_track
+        resume_position = self.config.resume_position
+        started = False
+        if (
+            resume_path
+            and resume_path in self._engine.playlist()
+            and os.path.isfile(resume_path)
+        ):
+            self._resume_position_pending = (
+                resume_position if resume_position > 1.0 else None
+            )
+            started = self._engine.play_track(resume_path)
+            if started and self._resume_position_pending is not None:
+                self._resume_timer.start()
+                self.statusBar().showMessage(
+                    f"Resuming at {_format_clock(resume_position)}"
+                )
+        if not started:
+            self._resume_position_pending = None
+            started = self._engine.play()
+
+        if started:
             self._update_transport_buttons()
-            self.statusBar().showMessage("ON AIR — playing")
+            if self._resume_position_pending is None:
+                self.statusBar().showMessage("ON AIR — playing")
         else:
             self.statusBar().showMessage("Add music to go on air")
+
+    def _save_resume_state(self, force: bool = False) -> None:
+        """Remember the current track and position for the next launch."""
+        path = self._engine.current_track() or self._last_track_path
+        if not path or not os.path.isfile(path):
+            return
+        if self._engine.is_playing() or self._engine.is_paused():
+            position = self._engine.position()
+        else:
+            position = 0.0
+        if position < 1.0 and self._resume_position_pending is not None:
+            position = self._resume_position_pending
+
+        snapshot = (path, int(position))
+        if not force and snapshot == self._last_saved_resume:
+            return
+        self.config.resume_track = path
+        self.config.resume_position = position
+        self.config.save()
+        self._last_saved_resume = snapshot
 
     def _prev_track(self) -> None:
         if not self._engine.playlist():
             return
+        self._resume_position_pending = None
         self._engine.prev_track()
         self._update_transport_buttons()
 
     def _next_track(self) -> None:
         if not self._engine.playlist():
             return
+        self._resume_position_pending = None
         self._engine.next_track()
         self._update_transport_buttons()
 
     def _stop_playback(self) -> None:
+        self._resume_position_pending = None
         self._engine.stop()
+        self._save_resume_state(force=True)
         self.btn_play.setText("▶ Play")
         self._update_on_air()
         self.statusBar().showMessage("Stopped")
@@ -1590,6 +1690,7 @@ class MainWindow(QMainWindow):
     def _play_row(self, row: int, _column: int) -> None:
         paths = self._engine.playlist()
         if 0 <= row < len(paths):
+            self._resume_position_pending = None
             self._engine.play_track(paths[row])
             self._update_transport_buttons()
             self._update_on_air()
