@@ -46,7 +46,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtNetwork import QLocalServer
 
-from src.app_paths import resolve_path
+from src.app_paths import resolve_path, resource_dir
 from src.audio.engine import AUDIO_EXTENSIONS, AudioEngine
 from src.config import Config
 from src.single_instance import instance_name
@@ -671,7 +671,14 @@ class MainWindow(QMainWindow):
         return "dark" if window_color.lightness() < 128 else "light"
 
     def _app_icon(self) -> QIcon:
-        """Small built-in station icon (blue disc + white play triangle)."""
+        """Bundled station icon, with a generated fallback."""
+        for name in ("freevoice.ico", "freevoice.png"):
+            path = os.path.join(resource_dir(), "assets", name)
+            if os.path.isfile(path):
+                icon = QIcon(path)
+                if not icon.isNull():
+                    return icon
+
         pixmap = QPixmap(64, 64)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
@@ -714,6 +721,14 @@ class MainWindow(QMainWindow):
 
         # Always expose the tray icon: it is how a hidden radio is found again.
         self.tray.show()
+        # At login the shell may still be starting; re-assert the icon once
+        # Explorer has finished loading.
+        QTimer.singleShot(2000, self._refresh_tray_icon)
+        QTimer.singleShot(6000, self._refresh_tray_icon)
+
+    def _refresh_tray_icon(self) -> None:
+        if not self._shut_down and QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray.show()
 
     def _setup_instance_server(self) -> None:
         """Listen for a second launch so it can wake this window."""
@@ -1273,6 +1288,10 @@ class MainWindow(QMainWindow):
             event.ignore()
             self._minimize_to_tray()
             return
+        if action == "taskbar":
+            event.ignore()
+            self._minimize_to_taskbar()
+            return
         if action == "quit":
             self._shutdown()
             event.accept()
@@ -1282,6 +1301,9 @@ class MainWindow(QMainWindow):
         if choice == "tray":
             event.ignore()
             self._minimize_to_tray()
+        elif choice == "taskbar":
+            event.ignore()
+            self._minimize_to_taskbar()
         elif choice == "quit":
             self._shutdown()
             event.accept()
@@ -1301,6 +1323,9 @@ class MainWindow(QMainWindow):
         tray_button = box.addButton(
             "Minimize to Tray", QMessageBox.ButtonRole.AcceptRole
         )
+        taskbar_button = box.addButton(
+            "Minimize to Taskbar", QMessageBox.ButtonRole.ActionRole
+        )
         box.addButton("Close App", QMessageBox.ButtonRole.DestructiveRole)
         cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
         remember = QCheckBox("Remember my choice")
@@ -1311,7 +1336,12 @@ class MainWindow(QMainWindow):
         clicked = box.clickedButton()
         if clicked is None or clicked is cancel_button:
             return None
-        action = "tray" if clicked is tray_button else "quit"
+        if clicked is tray_button:
+            action = "tray"
+        elif clicked is taskbar_button:
+            action = "taskbar"
+        else:
+            action = "quit"
         if remember.isChecked():
             self.config.close_action = action
             self.config.save()
@@ -1331,11 +1361,17 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Still on air in the system tray")
         self.tray.showMessage(
             "Freevoice Radio",
-            "Still on air. If you don't see the icon, click the ^ arrow in the "
-            "taskbar to show hidden tray icons.",
+            "Still on air. If you don't see the icon, click ^ in the taskbar "
+            "and enable Freevoice Radio under Settings → Personalization → "
+            "Taskbar → Other system tray icons.",
             QSystemTrayIcon.MessageIcon.Information,
-            4000,
+            6000,
         )
+
+    def _minimize_to_taskbar(self) -> None:
+        self.showMinimized()
+        self.tray.show()
+        self.statusBar().showMessage("Still on air — minimized to the taskbar")
 
     def _shutdown(self) -> None:
         if self._shut_down:

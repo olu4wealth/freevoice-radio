@@ -162,13 +162,20 @@ working.
 Clicking the window's close button asks what to do:
 
 - **Minimize to Tray** — keeps the radio playing; find it via the tray icon.
+- **Minimize to Taskbar** — keeps the radio playing and leaves a normal
+  taskbar button, useful if the tray icon is hidden by Windows.
 - **Close App** — stops playback and exits.
 - **Remember my choice** — stores the answer; change it later under
   Settings → General → *When I click the close button*.
 
-The tray icon is always shown. Windows 11 hides new tray icons in the **^**
-overflow area the first time; open it and drag the icon onto the taskbar to
-keep it visible.
+The tray icon is a blue disc with a white play triangle. Windows 11 hides new
+tray icons in the **^** overflow area the first time. If it is not there:
+Settings → Personalization → Taskbar → **Other system tray icons**, and enable
+Freevoice Radio. The app also has **Settings → General → Open Windows taskbar
+settings…** for this.
+
+If the window is hidden and you cannot find the icon, just start Freevoice
+Radio again: the single-instance guard brings the existing window back.
 
 ### Single instance
 
@@ -274,7 +281,8 @@ freevoice-radio/
 | Download reaches 100% but nothing plays | Fixed in this version: the completion handler now adds the track and starts playback. If it still happens, check `freevoice.log` next to the exe. |
 | "ffmpeg not found" / download fails after 100% | Put `ffmpeg.exe` and `ffprobe.exe` next to `Freevoice Radio.exe` (or install ffmpeg and add it to `PATH`). |
 | No sound at all | Open `python main.py --selftest --audible`; if it fails, Windows audio output or the QtMultimedia plugin is unavailable. |
-| App is playing but I can't find the window | It is in the system tray. On Windows 11 click the **^** arrow near the clock; drag the Freevoice icon onto the taskbar to pin it. Double-click the icon to restore, or use tray → Quit to stop completely. |
+| App is playing but I can't find the window | Start Freevoice Radio again — the single-instance guard restores the hidden window. Then use the tray icon or set the close button to **Minimize to Taskbar**. |
+| Tray icon missing from the **^** overflow | Windows Settings → Personalization → Taskbar → **Other system tray icons** → enable Freevoice Radio. Settings → General also has a button that opens this page. |
 | Closing the window hid the app instead of exiting | That is the close-button choice. Set Settings → General → *When I click the close button* to **Close the app**, or use File → Exit / tray → Quit. |
 | `Failed to load Python DLL` / missing files | Keep `Freevoice Radio.exe` and the `_internal` folder together. Do not copy the exe on its own. |
 | SmartScreen: "Windows protected your PC" | Expected for an unsigned, locally built exe. Click **More info → Run anyway**, run from source, or code-sign the build. |

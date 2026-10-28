@@ -13,10 +13,11 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PyQt6.QtCore import QLockFile
+from PyQt6.QtGui import QIcon
 from PyQt6.QtNetwork import QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from src.app_paths import app_dir, config_path
+from src.app_paths import app_dir, config_path, resource_dir
 from src.config import Config
 from src.gui.main_window import MainWindow
 from src.single_instance import instance_name, lock_path
@@ -63,6 +64,10 @@ def main() -> None:
     app = QApplication(sys.argv)
     app.setApplicationName("Freevoice Radio")
     app.setOrganizationName("Freevoice")
+    app.setQuitOnLastWindowClosed(False)
+    icon_file = os.path.join(resource_dir(), "assets", "freevoice.png")
+    if os.path.isfile(icon_file):
+        app.setWindowIcon(QIcon(icon_file))
 
     minimized_start = "--minimized" in sys.argv
 

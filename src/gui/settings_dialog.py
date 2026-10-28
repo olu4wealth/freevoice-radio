@@ -11,7 +11,8 @@ from PyQt6.QtWidgets import (
     QFileDialog, QDialogButtonBox, QGroupBox, QSpinBox, QLineEdit,
     QMessageBox,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QDesktopServices
 
 from src.config import Config
 from src.startup import is_startup_enabled, set_startup_enabled
@@ -177,11 +178,29 @@ class SettingsDialog(QDialog):
         )
         v.addWidget(self.startup_chk)
 
+        tray_btn = QPushButton("Open Windows taskbar settings…")
+        tray_btn.setToolTip("Enable Freevoice Radio under Other system tray icons")
+        tray_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl("ms-settings:taskbar"))
+        )
+        v.addWidget(tray_btn)
+        tray_hint = QLabel(
+            "If the tray icon is missing, open the taskbar settings and enable "
+            "Freevoice Radio under “Other system tray icons”."
+        )
+        tray_hint.setWordWrap(True)
+        v.addWidget(tray_hint)
+
         close_h = QHBoxLayout()
         close_h.addWidget(QLabel("When I click the close button:"))
         self.close_combo = QComboBox()
         self.close_combo.addItems(
-            ["Ask every time", "Minimize to tray and keep playing", "Close the app"]
+            [
+                "Ask every time",
+                "Minimize to tray and keep playing",
+                "Minimize to taskbar and keep playing",
+                "Close the app",
+            ]
         )
         close_h.addWidget(self.close_combo)
         close_h.addStretch()
@@ -224,7 +243,7 @@ class SettingsDialog(QDialog):
         self.theme_combo.setCurrentIndex(theme_map.get(cfg.theme, 0))
         self.autoplay_chk.setChecked(cfg.autoplay)
         self.startup_chk.setChecked(is_startup_enabled())
-        close_map = {"ask": 0, "tray": 1, "quit": 2}
+        close_map = {"ask": 0, "tray": 1, "taskbar": 2, "quit": 3}
         self.close_combo.setCurrentIndex(close_map.get(cfg.close_action, 0))
         self.sched_chk.setChecked(cfg.scheduler_enabled)
         self.sched_spin.setValue(cfg.scheduler_interval_minutes)
@@ -248,7 +267,7 @@ class SettingsDialog(QDialog):
         theme_map = {0: "dark", 1: "light", 2: "system"}
         cfg.theme = theme_map[self.theme_combo.currentIndex()]
         cfg.autoplay = self.autoplay_chk.isChecked()
-        close_map = {0: "ask", 1: "tray", 2: "quit"}
+        close_map = {0: "ask", 1: "tray", 2: "taskbar", 3: "quit"}
         cfg.close_action = close_map[self.close_combo.currentIndex()]
         cfg.scheduler_enabled = self.sched_chk.isChecked()
         cfg.scheduler_interval_minutes = self.sched_spin.value()
