@@ -88,6 +88,7 @@ Right-click any row (multi-select works) for:
 | Action | Behaviour |
 |--------|-----------|
 | ▶ Play | Start that track immediately |
+| Download Cover Art | Fetches the YouTube thumbnail for a track that has no cover yet |
 | Remove from Playlist | Hides the track but keeps the file. The path is remembered as excluded, so it is not auto-imported again |
 | Delete File from Disk… | Permanently deletes the file after confirmation; downloaded leftovers (`.webm`) and index entries are cleaned up too |
 
@@ -108,6 +109,21 @@ Downloads run one at a time so ffmpeg conversions do not fight for CPU.
 Each row shows its title, source (URL / channel / scheduler), progress and
 status. Failed rows keep the error message as a tooltip. The compact progress
 bar in the transport row mirrors the active download.
+
+### File size and disk space
+
+MP3 size is roughly `bitrate × duration / 8`:
+
+| Quality | 1 hour | Your 83-minute track |
+|---------|--------|----------------------|
+| 96 kbps | ~42 MB | ~58 MB |
+| 128 kbps | ~56 MB | ~78 MB |
+| 192 kbps | ~84 MB | ~117 MB |
+
+YouTube serves audio at roughly 120 kbps (Opus), so converting it to a
+192 kbps MP3 actually **increases** the size. New installs default to
+**128 kbps**; change it under Settings → YouTube → **MP3 Quality**. Existing
+files are not re-encoded — delete and re-download a track to shrink it.
 
 ### Managing channels
 
@@ -152,6 +168,7 @@ All settings are saved to `config.json` in the project folder. The Settings dial
 |---------|---------|
 | YouTube mode | Download (save to disk) / Stream (temp file) |
 | Audio format | mp3, wav, flac, m4a |
+| MP3 quality | 96 / 128 / 160 / 192 / 256 / 320 kbps |
 | Loop mode | Loop All, Loop One, Off |
 | Shuffle | On / Off |
 | Auto-start | Play when the app opens |

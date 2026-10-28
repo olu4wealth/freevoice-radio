@@ -16,6 +16,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "youtube_mode": "download",
     "download_path": "downloads",
     "audio_format": "mp3",
+    "audio_quality": "128",
     "local_folder": None,
     "playlist": [],
     "excluded": [],
@@ -106,6 +107,19 @@ class Config:
     @audio_format.setter
     def audio_format(self, value: str) -> None:
         self._data["audio_format"] = value
+
+    @property
+    def audio_quality(self) -> str:
+        """MP3 bitrate in kbps (96/128/160/192/256/320)."""
+        value = str(self._data.get("audio_quality") or "128")
+        return value if value in ("96", "128", "160", "192", "256", "320") else "128"
+
+    @audio_quality.setter
+    def audio_quality(self, value: str) -> None:
+        value = str(value or "128")
+        self._data["audio_quality"] = (
+            value if value in ("96", "128", "160", "192", "256", "320") else "128"
+        )
 
     @property
     def local_folder(self) -> str | None:

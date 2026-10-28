@@ -100,9 +100,15 @@ class DownloadThread(QThread):
 
 
 class YouTubeDownloader:
-    def __init__(self, download_path: str = "downloads", audio_format: str = "mp3") -> None:
+    def __init__(
+        self,
+        download_path: str = "downloads",
+        audio_format: str = "mp3",
+        audio_quality: str = "128",
+    ) -> None:
         self.download_path = download_path
         self.audio_format = audio_format
+        self.audio_quality = str(audio_quality or "128")
         os.makedirs(download_path, exist_ok=True)
         self._lock = threading.Lock()
         self._on_progress: Optional[Callable[[str, float], None]] = None
@@ -265,7 +271,7 @@ class YouTubeDownloader:
                     {
                         "key": "FFmpegExtractAudio",
                         "preferredcodec": self.audio_format,
-                        "preferredquality": "192",
+                        "preferredquality": self.audio_quality,
                     }
                 ],
             }
@@ -457,6 +463,41 @@ class YouTubeDownloader:
         if stale:
             self._save_index()
         return len(stale)
+
+    def video_id_for_file(self, path: str) -> Optional[str]:
+        """Return the YouTube id that produced ``path``, if known."""
+        name = os.path.basename(path)
+        target = os.path.normcase(name)
+        for video_id, filename in self._index.items():
+            if os.path.normcase(filename) == target:
+                return video_id
+        return None
+
+    def fetch_cover_for_file(
+        self, path: str, video_id: Optional[str] = None
+    ) -> Optional[str]:
+        """Download cover art for an existing audio file.
+
+        The video id is taken from the download index unless supplied.
+        Returns the cover path, or None for local files with no video link.
+        """
+        path = os.path.normpath(os.path.abspath(path))
+        if not os.path.isfile(path):
+            return None
+        base = os.path.splitext(path)[0]
+        existing = self._find_cover_file(base)
+        if existing:
+            return existing
+        video_id = video_id or self.video_id_for_file(path)
+        if not video_id:
+            return None
+        track = YouTubeTrack(
+            id=video_id,
+            title=os.path.basename(base),
+            artist="YouTube",
+            duration=0,
+        )
+        return self._download_cover(track, base)
 
     def _find_audio_file(self, video_id: str) -> Optional[str]:
         """Find the converted audio file for a video id."""

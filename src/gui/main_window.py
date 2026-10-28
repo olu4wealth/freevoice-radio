@@ -152,6 +152,29 @@ class ChannelFetchThread(QThread):
             self.failed.emit("No videos found for this channel")
 
 
+class CoverFetchThread(QThread):
+    """Fetch missing cover art for an existing audio file."""
+
+    ready = pyqtSignal(str, object)   # audio path, cover path or None
+    failed = pyqtSignal(str, str)     # audio path, message
+
+    def __init__(self, downloader, path: str, video_id: Optional[str]) -> None:
+        super().__init__()
+        self._downloader = downloader
+        self._path = path
+        self._video_id = video_id
+
+    def run(self) -> None:
+        try:
+            cover = self._downloader.fetch_cover_for_file(
+                self._path, self._video_id
+            )
+        except Exception as exc:
+            self.failed.emit(self._path, str(exc))
+            return
+        self.ready.emit(self._path, cover)
+
+
 class MainWindow(QMainWindow):
     """Application shell: now-playing card, playlist table, controls, tray."""
 
@@ -169,6 +192,7 @@ class MainWindow(QMainWindow):
         self._track_history: list[str] = []
         self._max_history = 50
         self._cover_cache: dict[tuple[str, int], QPixmap] = {}
+        self._cover_threads: list["CoverFetchThread"] = []
         self._fetch_thread: Optional[ChannelFetchThread] = None
         self._fetch_channel_url = ""
         self._on_air_state: Optional[str] = None
@@ -188,6 +212,7 @@ class MainWindow(QMainWindow):
         self._yt_downloader = YouTubeDownloader(
             download_path=self.config.download_path,
             audio_format=self.config.audio_format,
+            audio_quality=self.config.audio_quality,
         )
         self._download_queue = DownloadQueue(self._yt_downloader, self)
         self._yt_scraper = ChannelScraper(
@@ -629,6 +654,7 @@ class MainWindow(QMainWindow):
                 "duration": int(entry.get("duration") or 0),
                 "source": entry.get("source") or "local",
                 "cover": entry.get("cover"),
+                "video_id": entry.get("video_id"),
             }
 
         folder = self.config.local_folder
@@ -684,6 +710,12 @@ class MainWindow(QMainWindow):
                     "duration": int(meta.get("duration") or 0),
                     "source": meta.get("source") or "local",
                     "cover": meta.get("cover") or self._cover_path(path),
+                    "video_id": meta.get("video_id")
+                    or (
+                        self._yt_downloader.video_id_for_file(path)
+                        if hasattr(self, "_yt_downloader")
+                        else None
+                    ),
                 }
             )
         self.config.playlist = entries
@@ -756,6 +788,58 @@ class MainWindow(QMainWindow):
             self.cover_label.setText("")
             self.cover_label.setPixmap(pixmap)
 
+    def _download_cover_art(self, path: str) -> None:
+        path = self._normalize(path)
+        if self._cover_path(path):
+            self.statusBar().showMessage("This track already has cover art")
+            return
+        video_id = (self._metadata.get(path) or {}).get("video_id")
+        if not video_id:
+            video_id = self._yt_downloader.video_id_for_file(path)
+        if not video_id:
+            QMessageBox.information(
+                self,
+                "Download Cover Art",
+                "This file is not linked to a YouTube video, so no cover "
+                "art can be downloaded.\n\n"
+                f"File: {os.path.basename(path)}",
+            )
+            return
+
+        thread = CoverFetchThread(self._yt_downloader, path, video_id)
+        thread.ready.connect(self._on_cover_ready)
+        thread.failed.connect(self._on_cover_failed)
+        thread.finished.connect(self._on_cover_thread_finished)
+        self._cover_threads.append(thread)
+        thread.start()
+        self.statusBar().showMessage("Downloading cover art…")
+
+    def _on_cover_ready(self, path: str, cover: object) -> None:
+        if not cover or not os.path.isfile(str(cover)):
+            self.statusBar().showMessage("No cover art available for this video")
+            return
+        meta = self._metadata.setdefault(path, self._local_metadata(path))
+        meta["cover"] = str(cover)
+        self._cover_cache.clear()
+        if self._engine.current_track() == path:
+            self._update_cover_label(path)
+        self._refresh_playlist_table()
+        self._persist_playlist()
+        self.statusBar().showMessage(
+            f"Cover art saved: {os.path.basename(str(cover))}"
+        )
+
+    def _on_cover_failed(self, path: str, message: str) -> None:
+        print(f"[cover] {path}: {message}")
+        self.statusBar().showMessage(f"Cover art failed: {message}")
+
+    def _on_cover_thread_finished(self) -> None:
+        thread = self.sender()
+        if thread in self._cover_threads:
+            self._cover_threads.remove(thread)
+        if thread is not None:
+            thread.deleteLater()
+
     @staticmethod
     def _is_playable_file(path: str) -> bool:
         name = os.path.basename(path).lower()
@@ -783,6 +867,11 @@ class MainWindow(QMainWindow):
             "duration": 0,
             "source": source,
             "cover": self._cover_path(path),
+            "video_id": (
+                self._yt_downloader.video_id_for_file(path)
+                if hasattr(self, "_yt_downloader")
+                else None
+            ),
         }
 
     def _on_playlist_changed(self) -> None:
@@ -940,6 +1029,7 @@ class MainWindow(QMainWindow):
             "duration": int(track.duration or 0),
             "source": "stream" if item.stream else "youtube",
             "cover": track.cover_path,
+            "video_id": track.id,
         }
         self._cover_cache.clear()
         self._engine.add_track(path, stream=item.stream)
@@ -1126,6 +1216,11 @@ class MainWindow(QMainWindow):
             self._download_queue.stop()
         except Exception:
             traceback.print_exc()
+        for thread in list(self._cover_threads):
+            try:
+                thread.wait(3000)
+            except RuntimeError:
+                pass
         if self._fetch_thread is not None:
             try:
                 self._fetch_thread.wait(3000)
@@ -1327,6 +1422,9 @@ class MainWindow(QMainWindow):
 
         menu = QMenu(self)
         play_action = menu.addAction("▶ Play")
+        cover_action = None
+        if len(paths) == 1 and not self._cover_path(paths[0]):
+            cover_action = menu.addAction("Download Cover Art")
         menu.addSeparator()
         remove_action = menu.addAction("Remove from Playlist")
         remove_action.setToolTip("Keep the file on disk, hide it from the playlist")
@@ -1340,6 +1438,8 @@ class MainWindow(QMainWindow):
         chosen = menu.exec(self.playlist_table.viewport().mapToGlobal(position))
         if chosen == play_action:
             self._play_row(row, 0)
+        elif cover_action is not None and chosen == cover_action:
+            self._download_cover_art(paths[0])
         elif chosen == remove_action:
             self._remove_tracks(paths)
         elif chosen == delete_action:
@@ -1683,6 +1783,7 @@ class MainWindow(QMainWindow):
         self._apply_theme(self.config.theme)
         self._yt_downloader.download_path = self.config.download_path
         self._yt_downloader.audio_format = self.config.audio_format
+        self._yt_downloader.audio_quality = self.config.audio_quality
         try:
             os.makedirs(self.config.download_path, exist_ok=True)
         except OSError as exc:

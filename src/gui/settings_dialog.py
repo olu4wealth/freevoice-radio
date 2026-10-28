@@ -115,6 +115,23 @@ class SettingsDialog(QDialog):
         fmt_v.addWidget(self.format_combo)
         v.addWidget(fmt_grp)
 
+        qual_grp = QGroupBox("MP3 Quality")
+        qual_v = QVBoxLayout(qual_grp)
+        qual_h = QHBoxLayout()
+        qual_h.addWidget(QLabel("Bitrate (kbps):"))
+        self.quality_combo = QComboBox()
+        self.quality_combo.addItems(["96", "128", "160", "192", "256", "320"])
+        qual_h.addWidget(self.quality_combo)
+        qual_h.addStretch()
+        qual_v.addLayout(qual_h)
+        qual_hint = QLabel(
+            "Lower bitrate = smaller files. Roughly: 128 kbps ≈ 58 MB/hour, "
+            "192 kbps ≈ 86 MB/hour. Only used when converting to MP3."
+        )
+        qual_hint.setWordWrap(True)
+        qual_v.addWidget(qual_hint)
+        v.addWidget(qual_grp)
+
         path_h = QHBoxLayout()
         path_h.addWidget(QLabel("Download folder:"))
         self.download_path_edit = QLineEdit(self.config.download_path)
@@ -191,6 +208,7 @@ class SettingsDialog(QDialog):
         yt_map = {"download": 0, "stream": 1}
         self.youtube_mode_combo.setCurrentIndex(yt_map.get(cfg.youtube_mode, 0))
         self.format_combo.setCurrentText(cfg.audio_format)
+        self.quality_combo.setCurrentText(cfg.audio_quality)
         self.download_path_edit.setText(cfg.download_path or "")
         theme_map = {"dark": 0, "light": 1, "system": 2}
         self.theme_combo.setCurrentIndex(theme_map.get(cfg.theme, 0))
@@ -214,6 +232,7 @@ class SettingsDialog(QDialog):
         yt_map = {0: "download", 1: "stream"}
         cfg.youtube_mode = yt_map[self.youtube_mode_combo.currentIndex()]
         cfg.audio_format = self.format_combo.currentText()
+        cfg.audio_quality = self.quality_combo.currentText()
         cfg.download_path = self.download_path_edit.text() or "downloads"
         theme_map = {0: "dark", 1: "light", 2: "system"}
         cfg.theme = theme_map[self.theme_combo.currentIndex()]
