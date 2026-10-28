@@ -130,14 +130,19 @@ class ChannelFetchThread(QThread):
     fetched = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, scraper: ChannelScraper, url: str) -> None:
+    def __init__(
+        self, scraper: ChannelScraper, url: str, max_videos: Optional[int] = None
+    ) -> None:
         super().__init__()
         self._scraper = scraper
         self._url = url
+        self._max_videos = max_videos
 
     def run(self) -> None:
         try:
-            videos = self._scraper.fetch_videos(self._url)
+            videos = self._scraper.fetch_videos(
+                self._url, max_videos=self._max_videos
+            )
         except Exception as exc:
             self.failed.emit(str(exc))
             return
@@ -165,6 +170,7 @@ class MainWindow(QMainWindow):
         self._max_history = 50
         self._cover_cache: dict[tuple[str, int], QPixmap] = {}
         self._fetch_thread: Optional[ChannelFetchThread] = None
+        self._fetch_channel_url = ""
         self._on_air_state: Optional[str] = None
         self._force_quit = False
         self._shut_down = False
@@ -1587,7 +1593,21 @@ class MainWindow(QMainWindow):
         if self._fetch_thread and self._fetch_thread.isRunning():
             self.statusBar().showMessage("A channel fetch is already running")
             return
-        self._fetch_thread = ChannelFetchThread(self._yt_scraper, channel_url)
+        channel = next(
+            (
+                item
+                for item in self.config.channels
+                if (item.get("url") or item.get("id")) == channel_url
+            ),
+            None,
+        )
+        max_videos = (
+            int(channel.get("max_videos_per_fetch") or 10) if channel else None
+        )
+        self._fetch_thread = ChannelFetchThread(
+            self._yt_scraper, channel_url, max_videos=max_videos
+        )
+        self._fetch_channel_url = channel_url
         self._fetch_thread.fetched.connect(self._on_channel_videos_fetched)
         self._fetch_thread.failed.connect(self._on_channel_fetch_failed)
         self._fetch_thread.finished.connect(self._on_channel_fetch_finished)
@@ -1602,12 +1622,39 @@ class MainWindow(QMainWindow):
             thread.deleteLater()
 
     def _on_channel_videos_fetched(self, videos) -> None:
+        if not videos:
+            self.statusBar().showMessage("No videos found for this channel")
+            return
+        from src.gui.channel_videos_dialog import ChannelVideosDialog
+
+        channel_url = getattr(self, "_fetch_channel_url", "")
+        channel_name = next(
+            (
+                item.get("name") or item.get("url") or ""
+                for item in self.config.channels
+                if (item.get("url") or item.get("id")) == channel_url
+            ),
+            channel_url,
+        )
+        dialog = ChannelVideosDialog(
+            self,
+            channel_name=channel_name,
+            videos=list(videos),
+            is_downloaded=lambda video: bool(
+                self._yt_downloader._find_audio_file(video.id)
+            ),
+        )
+        if not dialog.exec():
+            self.statusBar().showMessage("Channel selection cancelled")
+            return
+
+        selected = dialog.selected_videos()
+        if not selected:
+            self.statusBar().showMessage("No videos selected")
+            return
+
         added = 0
-        skipped = 0
-        for video in videos:
-            if self._yt_downloader._find_audio_file(video.id):
-                skipped += 1
-                continue
+        for video in selected:
             if self._download_queue.add(
                 video.url,
                 title=video.title,
@@ -1618,10 +1665,7 @@ class MainWindow(QMainWindow):
         if added:
             self.queue_dock.show()
             self._refresh_queue_table()
-        self.statusBar().showMessage(
-            f"Channel: queued {added} video(s)"
-            + (f", skipped {skipped} already downloaded" if skipped else "")
-        )
+        self.statusBar().showMessage(f"Channel: queued {added} selected video(s)")
 
     def _on_channel_fetch_failed(self, message: str) -> None:
         self.statusBar().showMessage(f"Channel fetch failed: {message}")

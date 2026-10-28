@@ -96,8 +96,11 @@ class ChannelUpdater:
         channel_url = channel.get("url") or ""
         if not channel_url:
             return
+        max_videos = int(channel.get("max_videos_per_fetch") or 10)
         try:
-            videos = self.scraper.fetch_videos(channel_url)
+            videos = self.scraper.fetch_videos(
+                channel_url, max_videos=max_videos
+            )
         except Exception as exc:
             print(f"[scheduler] error fetching {channel_url}: {exc}")
             return
@@ -107,9 +110,8 @@ class ChannelUpdater:
 
         channel["last_checked"] = datetime.now().strftime("%Y%m%d%H%M%S")
 
-        max_videos = int(channel.get("max_videos_per_fetch") or 10)
         new_videos = []
-        for video in videos[:max_videos]:
+        for video in videos:
             if self._stop_event.is_set():
                 break
             # Never queue something that is already on disk.

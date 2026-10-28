@@ -44,7 +44,8 @@ class ChannelsDialog(QDialog):
         layout = QVBoxLayout(self)
         hint = QLabel(
             "Enabled channels are polled by the background scheduler. "
-            "Use Fetch Now to pull the latest videos into the download queue."
+            "Browse Videos… fetches the latest list so you can pick which "
+            "videos to queue."
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -64,7 +65,7 @@ class ChannelsDialog(QDialog):
         add_btn.clicked.connect(self._add_channel)
         remove_btn = QPushButton("Remove Selected")
         remove_btn.clicked.connect(self._remove_selected)
-        fetch_btn = QPushButton("Fetch Now")
+        fetch_btn = QPushButton("Browse Videos…")
         fetch_btn.clicked.connect(self._fetch_now)
         buttons.addWidget(add_btn)
         buttons.addWidget(remove_btn)

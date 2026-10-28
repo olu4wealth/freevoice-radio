@@ -118,10 +118,12 @@ Channel → Manage Channels… lists every configured channel with:
 - **Last checked** timestamp
 - **Videos** — how many recent videos to pull per poll
 
-From there you can **Add Channel…**, **Remove Selected**, or **Fetch Now** to
-queue the channel's latest videos immediately. New videos found by the
-scheduler are queued the same way, so unattended updates appear in the queue
-and are added to the playlist as they finish.
+From there you can **Add Channel…**, **Remove Selected**, or **Browse Videos…**
+to fetch the channel's latest list and tick exactly which videos to queue.
+Downloaded videos are shown as such and cannot be selected twice. The
+background scheduler still auto-queues new videos (up to the channel's
+**Videos** limit) without opening the picker, so unattended updates keep
+working.
 
 ### Closing the app
 
@@ -179,7 +181,8 @@ freevoice-radio/
     │   └── backends.py     # QtMultimedia streaming backend + crossfade
     ├── gui/
     │   ├── main_window.py  # Main window, tray, controls, queue dock
-    │   ├── channels_dialog.py  # Channel manager (enable/remove/fetch now)
+    │   ├── channels_dialog.py  # Channel manager (enable/remove/browse)
+    │   ├── channel_videos_dialog.py  # Pick videos from a channel
     │   ├── settings_dialog.py  # Settings dialog
     │   └── themes.qss      # Dark/light theme stylesheet
     ├── youtube/
