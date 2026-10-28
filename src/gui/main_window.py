@@ -1295,6 +1295,9 @@ class MainWindow(QMainWindow):
         if action == "quit":
             self._shutdown()
             event.accept()
+            app = QApplication.instance()
+            if app is not None:
+                app.quit()
             return
 
         choice = self._ask_close_action()
@@ -1307,6 +1310,9 @@ class MainWindow(QMainWindow):
         elif choice == "quit":
             self._shutdown()
             event.accept()
+            app = QApplication.instance()
+            if app is not None:
+                app.quit()
         else:
             event.ignore()
 
