@@ -35,6 +35,7 @@ downloads/
 config.json
 config.*.json
 freevoice.log
+freevoice.lock
 *.log
 
 # ---- Local scratch ----

@@ -193,6 +193,19 @@ class AudioEngine:
     def is_paused(self) -> bool:
         return self._is_paused
 
+    def is_stream_track(self, path: str) -> bool:
+        with self._lock:
+            return path in self._stream_temp_files
+
+    def restart_current(self) -> bool:
+        """Reload the current source without changing the playlist index."""
+        with self._lock:
+            path = self.current_track()
+            if not path or not os.path.exists(path):
+                return False
+            self._stop_locked()
+            return self._load_and_play(path)
+
     def position(self) -> float:
         return self.backend.get_position()
 

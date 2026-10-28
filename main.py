@@ -12,11 +12,14 @@ import traceback
 # Ensure the package root is importable when run as a script
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from PyQt6.QtCore import QLockFile
+from PyQt6.QtNetwork import QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from src.app_paths import app_dir, config_path
 from src.config import Config
 from src.gui.main_window import MainWindow
+from src.single_instance import instance_name, lock_path
 
 LOG_NAME = "freevoice.log"
 
@@ -61,12 +64,30 @@ def main() -> None:
     app.setApplicationName("Freevoice Radio")
     app.setOrganizationName("Freevoice")
 
+    minimized_start = "--minimized" in sys.argv
+
+    # Only one radio may play at a time.  A second launch wakes the existing
+    # window through a local socket and exits.
+    instance_lock = QLockFile(str(lock_path()))
+    instance_lock.setStaleLockTime(30000)
+    if not instance_lock.tryLock(500):
+        socket = QLocalSocket()
+        socket.connectToServer(instance_name())
+        if socket.waitForConnected(2500):
+            socket.write(b"show")
+            socket.waitForBytesWritten(1000)
+            socket.disconnectFromServer()
+        sys.exit(0)
+
     try:
         config = Config(config_path=config_path())
         config.save()  # materialise config.json next to the exe on first run
 
         window = MainWindow(config)
-        window.show()
+        if minimized_start:
+            window.hide()
+        else:
+            window.show()
     except Exception:
         detail = traceback.format_exc()
         print(detail)

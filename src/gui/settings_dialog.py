@@ -9,10 +9,12 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QLabel, QPushButton, QComboBox, QCheckBox, QSlider,
     QFileDialog, QDialogButtonBox, QGroupBox, QSpinBox, QLineEdit,
+    QMessageBox,
 )
 from PyQt6.QtCore import Qt
 
 from src.config import Config
+from src.startup import is_startup_enabled, set_startup_enabled
 
 
 class SettingsDialog(QDialog):
@@ -167,6 +169,14 @@ class SettingsDialog(QDialog):
         self.autoplay_chk = QCheckBox("Start playing when Freevoice Radio opens")
         v.addWidget(self.autoplay_chk)
 
+        self.startup_chk = QCheckBox(
+            "Start Freevoice Radio with Windows (minimized to tray)"
+        )
+        self.startup_chk.setToolTip(
+            "Adds a per-user Windows startup entry. No admin rights required."
+        )
+        v.addWidget(self.startup_chk)
+
         close_h = QHBoxLayout()
         close_h.addWidget(QLabel("When I click the close button:"))
         self.close_combo = QComboBox()
@@ -213,6 +223,7 @@ class SettingsDialog(QDialog):
         theme_map = {"dark": 0, "light": 1, "system": 2}
         self.theme_combo.setCurrentIndex(theme_map.get(cfg.theme, 0))
         self.autoplay_chk.setChecked(cfg.autoplay)
+        self.startup_chk.setChecked(is_startup_enabled())
         close_map = {"ask": 0, "tray": 1, "quit": 2}
         self.close_combo.setCurrentIndex(close_map.get(cfg.close_action, 0))
         self.sched_chk.setChecked(cfg.scheduler_enabled)
@@ -241,6 +252,12 @@ class SettingsDialog(QDialog):
         cfg.close_action = close_map[self.close_combo.currentIndex()]
         cfg.scheduler_enabled = self.sched_chk.isChecked()
         cfg.scheduler_interval_minutes = self.sched_spin.value()
+        if not set_startup_enabled(self.startup_chk.isChecked()):
+            QMessageBox.warning(
+                self,
+                "Start with Windows",
+                "Could not update the Windows startup entry.",
+            )
         cfg.save()
         self.accept()
 

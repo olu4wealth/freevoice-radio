@@ -28,6 +28,9 @@ everything plays from local files or downloaded audio on your PC.
   and shown in the now-playing card and playlist
 - **Seekable playback** — click or drag the progress bar to jump in a track
 - **Library tools** — drag-and-drop, search/filter, reorder, Up Next
+- **Single instance** — launching again wakes the running radio instead of starting a second copy
+- **Optional Windows startup** — launch minimized to the tray at login
+- **Stream watchdog** — restarts a stalled streaming track automatically
 
 ## Requirements
 
@@ -167,6 +170,29 @@ The tray icon is always shown. Windows 11 hides new tray icons in the **^**
 overflow area the first time; open it and drag the icon onto the taskbar to
 keep it visible.
 
+### Single instance
+
+Only one radio runs at a time. If you launch the app again — double-clicking
+the exe, the Start menu shortcut, or Windows startup — the existing window is
+brought to the front and the second process exits.
+
+### Start with Windows
+
+Settings → General → **Start Freevoice Radio with Windows (minimized to tray)**
+is **off by default**. When enabled it adds a per-user entry under
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (no admin rights needed).
+Windows launches it as `"…\Freevoice Radio.exe" --minimized`, so it starts
+hidden in the tray and, if Autoplay is on, resumes the last track and position.
+Turning the checkbox off removes the entry.
+
+### Streaming watchdog
+
+While a **stream** track (YouTube mode = Stream) is playing, the app checks the
+playback position every second. If it has not advanced for 15 seconds, it
+reloads the stream and seeks back to the last position. After two failed
+restarts it skips to the next track. Downloaded files are never restarted by
+the watchdog.
+
 Downloaded YouTube files are named after the video title, e.g.
 `SOAK IN HIS PRESENCE A Powerful Worship Experience.mp3`. A hidden
 `downloads/.freevoice_index.json` remembers which video each file came from,
@@ -195,6 +221,7 @@ All settings are saved to `config.json` in the project folder. The Settings dial
 | Audio format | mp3, wav, flac, m4a |
 | MP3 quality | 96 / 128 / 160 / 192 / 256 / 320 kbps |
 | Loop mode | Loop All, Loop One, Off |
+| Start with Windows | Off by default; launches minimized to tray at login |
 | Shuffle | On / Off |
 | Auto-start | Play when the app opens |
 | Gapless playback | On / Off |
@@ -217,6 +244,8 @@ freevoice-radio/
 └── src/
     ├── app_paths.py        # Source/frozen paths + ffmpeg discovery
     ├── config.py           # Configuration manager
+    ├── single_instance.py  # Lock/socket name for one running app
+    ├── startup.py          # Optional HKCU Windows startup entry
     ├── selftest.py         # Playback smoke tests
     ├── audio/
     │   ├── engine.py       # Playback engine (loop, crossfade, silence, streams)

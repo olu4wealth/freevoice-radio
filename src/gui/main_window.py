@@ -44,10 +44,12 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from PyQt6.QtNetwork import QLocalServer
 
 from src.app_paths import resolve_path
 from src.audio.engine import AUDIO_EXTENSIONS, AudioEngine
 from src.config import Config
+from src.single_instance import instance_name
 from src.scheduler.updater import ChannelUpdater
 from src.youtube.channel_scraper import ChannelScraper, video_id_from_url
 from src.youtube.download_queue import DownloadQueue
@@ -246,6 +248,10 @@ class MainWindow(QMainWindow):
         self._resume_position_pending: Optional[float] = None
         self._last_saved_resume: tuple[str, int] | None = None
         self._last_track_path = ""
+        self._watchdog_last_position = 0.0
+        self._watchdog_stall_ticks = 0
+        self._watchdog_attempts = 0
+        self._watchdog_restarting = False
 
         self._engine = AudioEngine(
             download_path=self.config.download_path,
@@ -277,6 +283,7 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._apply_theme(config.theme)
         self._setup_tray()
+        self._setup_instance_server()
         self._wire_engine_settings()
         self._load_playlist()
 
@@ -708,6 +715,25 @@ class MainWindow(QMainWindow):
         # Always expose the tray icon: it is how a hidden radio is found again.
         self.tray.show()
 
+    def _setup_instance_server(self) -> None:
+        """Listen for a second launch so it can wake this window."""
+        self._instance_server = QLocalServer(self)
+        self._instance_server.newConnection.connect(self._on_second_instance)
+        QLocalServer.removeServer(instance_name())
+        if not self._instance_server.listen(instance_name()):
+            print(
+                f"[single-instance] could not listen: "
+                f"{self._instance_server.errorString()}"
+            )
+
+    def _on_second_instance(self) -> None:
+        while self._instance_server.hasPendingConnections():
+            connection = self._instance_server.nextPendingConnection()
+            if connection is not None:
+                connection.disconnectFromServer()
+        self.show_normal()
+        self.statusBar().showMessage("Freevoice Radio is already running")
+
     # ------------------------------------------------------------------
     # Playlist loading / persistence
     # ------------------------------------------------------------------
@@ -1004,6 +1030,8 @@ class MainWindow(QMainWindow):
         self._track_history.insert(0, file_path)
         self._track_history = self._track_history[: self._max_history]
         self._last_track_path = file_path
+        if not self._watchdog_restarting:
+            self._reset_watchdog(full=True)
         if (
             self._resume_position_pending is not None
             and file_path != self.config.resume_track
@@ -1340,6 +1368,11 @@ class MainWindow(QMainWindow):
         except Exception:
             traceback.print_exc()
         try:
+            self._instance_server.close()
+            QLocalServer.removeServer(instance_name())
+        except Exception:
+            traceback.print_exc()
+        try:
             self._engine.quit()
         except Exception:
             traceback.print_exc()
@@ -1459,6 +1492,60 @@ class MainWindow(QMainWindow):
         self.on_air_label.style().unpolish(self.on_air_label)
         self.on_air_label.style().polish(self.on_air_label)
 
+    def _reset_watchdog(self, full: bool = False) -> None:
+        self._watchdog_last_position = 0.0
+        self._watchdog_stall_ticks = 0
+        if full:
+            self._watchdog_attempts = 0
+
+    def _check_stream_watchdog(self, position: float) -> None:
+        """Restart a stalled stream; downloaded files are left alone."""
+        if not self._engine.is_playing():
+            self._reset_watchdog(full=True)
+            return
+        current = self._engine.current_track()
+        if not current or not self._engine.is_stream_track(current):
+            self._reset_watchdog(full=True)
+            return
+
+        if position > self._watchdog_last_position + 0.75:
+            self._watchdog_last_position = position
+            self._watchdog_stall_ticks = 0
+            self._watchdog_attempts = 0
+            return
+        if position < self._watchdog_last_position - 1.0:
+            self._watchdog_last_position = position
+            self._watchdog_stall_ticks = 0
+            return
+
+        self._watchdog_stall_ticks += 1
+        if self._watchdog_stall_ticks < 15:
+            return
+
+        last_position = self._watchdog_last_position
+        self._watchdog_stall_ticks = 0
+        if self._watchdog_attempts < 2:
+            self._watchdog_restarting = True
+            try:
+                restarted = self._engine.restart_current()
+            finally:
+                self._watchdog_restarting = False
+            if restarted:
+                self._watchdog_attempts += 1
+                self._resume_position_pending = max(0.0, last_position)
+                self._resume_timer.start()
+                self.statusBar().showMessage(
+                    "Stream stalled — reconnecting…", 5000
+                )
+                self._watchdog_last_position = 0.0
+                return
+
+        # Two failed restarts: skip to the next track.
+        self._watchdog_attempts = 0
+        self._watchdog_last_position = 0.0
+        self._engine.next_track()
+        self.statusBar().showMessage("Stream stalled — skipping to next", 5000)
+
     def _apply_pending_resume(self) -> None:
         if self._resume_position_pending is None:
             self._resume_timer.stop()
@@ -1503,12 +1590,14 @@ class MainWindow(QMainWindow):
                 self.seek_slider.blockSignals(False)
                 self.time_label.setText("0:00 / 0:00")
             self.seek_slider.setEnabled(False)
+        self._check_stream_watchdog(position)
         self._update_next_label()
 
     def _on_seek_changed(self, value: int) -> None:
         if self._resume_position_pending is not None:
             self._resume_timer.stop()
         self._resume_position_pending = None
+        self._watchdog_stall_ticks = 0
         duration = self._engine.duration()
         if duration <= 0:
             return
@@ -1681,6 +1770,7 @@ class MainWindow(QMainWindow):
 
     def _stop_playback(self) -> None:
         self._resume_position_pending = None
+        self._reset_watchdog(full=True)
         self._engine.stop()
         self._save_resume_state(force=True)
         self.btn_play.setText("▶ Play")
