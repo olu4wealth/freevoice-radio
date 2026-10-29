@@ -6,7 +6,8 @@ everything plays from local files or downloaded audio on your PC.
 
 ## Features
 
-- **YouTube audio playback** — Download audio-only from YouTube or stream via temp files
+- **YouTube audio playback** — Download audio-only from YouTube, originally or converted
+- **Original audio mode** — Keeps YouTube's Opus/M4A stream and skips FFmpeg conversion
 - **Local audio playback** — Play MP3, WAV, FLAC, M4A, OGG, AAC from any folder
 - **Continuous loop** — Loop All / Loop One / Shuffle / Off modes
 - **Channel-based playlist updates** — Add YouTube channels; app queues their latest videos automatically
@@ -128,7 +129,12 @@ bar in the transport row mirrors the active download.
 
 ### File size and disk space
 
-MP3 size is roughly `bitrate × duration / 8`:
+New downloads default to **Original (no conversion)**: the app keeps YouTube's
+audio-only Opus/M4A file and plays it directly. This starts faster and avoids
+the conversion step; the source is roughly **120 kbps**, or about **54 MB per
+hour**.
+
+MP3 is optional. Its size is roughly `bitrate × duration / 8`:
 
 | Quality | 1 hour | Your 83-minute track |
 |---------|--------|----------------------|
@@ -137,9 +143,10 @@ MP3 size is roughly `bitrate × duration / 8`:
 | 192 kbps | ~84 MB | ~117 MB |
 
 YouTube serves audio at roughly 120 kbps (Opus), so converting it to a
-192 kbps MP3 actually **increases** the size. New installs default to
-**128 kbps**; change it under Settings → YouTube → **MP3 Quality**. Existing
-files are not re-encoded — delete and re-download a track to shrink it.
+192 kbps MP3 actually **increases** the size. Choose the format under
+Settings → YouTube → **Format**. **MP3 Quality** only applies when converting
+to MP3. Existing files are never re-encoded — MP3 files stay exactly as they
+are.
 
 ### Managing channels
 
@@ -199,7 +206,8 @@ restarts it skips to the next track. Downloaded files are never restarted by
 the watchdog.
 
 Downloaded YouTube files are named after the video title, e.g.
-`SOAK IN HIS PRESENCE A Powerful Worship Experience.mp3`. A hidden
+`SOAK IN HIS PRESENCE A Powerful Worship Experience.webm` in Original mode
+(or `.mp3` when converting). A hidden
 `downloads/.freevoice_index.json` remembers which video each file came from,
 so re-adding a URL does not download it twice. Name collisions get ` (2)`.
 
@@ -223,8 +231,8 @@ All settings are saved to `config.json` in the project folder. The Settings dial
 | Setting | Options |
 |---------|---------|
 | YouTube mode | Download (save to disk) / Stream (temp file) |
-| Audio format | mp3, wav, flac, m4a |
-| MP3 quality | 96 / 128 / 160 / 192 / 256 / 320 kbps |
+| Audio format | Original (no conversion), mp3, wav, flac, m4a |
+| MP3 quality | 96 / 128 / 160 / 192 / 256 / 320 kbps (conversion only) |
 | Loop mode | Loop All, Loop One, Off |
 | Start with Windows | Off by default; launches minimized to tray at login |
 | Shuffle | On / Off |

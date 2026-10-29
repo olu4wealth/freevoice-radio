@@ -15,7 +15,7 @@ from src.app_paths import app_dir, resolve_path
 DEFAULT_CONFIG: dict[str, Any] = {
     "youtube_mode": "download",
     "download_path": "downloads",
-    "audio_format": "mp3",
+    "audio_format": "original",
     "audio_quality": "128",
     "local_folder": None,
     "playlist": [],
@@ -104,11 +104,15 @@ class Config:
 
     @property
     def audio_format(self) -> str:
-        return self._data["audio_format"]
+        value = str(self._data.get("audio_format") or "original").lower()
+        return value if value in ("original", "mp3", "wav", "flac", "m4a") else "original"
 
     @audio_format.setter
     def audio_format(self, value: str) -> None:
-        self._data["audio_format"] = value
+        value = str(value or "original").lower()
+        self._data["audio_format"] = (
+            value if value in ("original", "mp3", "wav", "flac", "m4a") else "original"
+        )
 
     @property
     def audio_quality(self) -> str:

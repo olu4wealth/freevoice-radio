@@ -969,16 +969,17 @@ class MainWindow(QMainWindow):
         if thread is not None:
             thread.deleteLater()
 
-    @staticmethod
-    def _is_playable_file(path: str) -> bool:
+    def _is_playable_file(self, path: str) -> bool:
         name = os.path.basename(path).lower()
         if not name.endswith(AUDIO_EXTENSIONS):
             return False
-        # yt-dlp's intermediate container for audio-only YouTube streams.
-        # The converted file is the library entry; importing the .webm too
-        # would list (and loop) the same track twice.
         if name.endswith(".webm"):
-            return False
+            # WebM is either an original-mode download or an old intermediate.
+            # Keep intermediates out unless this is a real downloaded track.
+            if self.config.audio_format == "original":
+                return True
+            downloader = getattr(self, "_yt_downloader", None)
+            return bool(downloader and downloader.video_id_for_file(path))
         # Legacy artefact of the old pygame backend; never a playlist entry.
         return not name.endswith("_converted.wav")
 

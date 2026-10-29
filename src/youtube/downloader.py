@@ -5,6 +5,7 @@ Uses yt-dlp to fetch audio-only streams from YouTube in two modes:
   * download  - save the audio to disk (MP3/WAV/FLAC/M4A) for offline looping
   * stream    - same download, but the file is treated as a temp file and is
                 deleted by the audio engine once it has been played
+  * original  - keep YouTube's audio-only Opus/M4A file and skip conversion
 
 The downloader reports real byte-based progress and tells the UI when the
 post-processing (ffmpeg extraction) phase starts, so a large track no
@@ -31,7 +32,7 @@ from src.app_paths import ffmpeg_dir
 # Raw containers that may be left behind by the audio conversion.
 SOURCE_EXTS = ("webm", "m4a", "mp4", "opus", "ogg", "aac")
 COVER_EXTS = (".jpg", ".jpeg", ".png", ".webp")
-AUDIO_EXTS = ("mp3", "wav", "flac", "m4a", "ogg", "opus", "aac")
+AUDIO_EXTS = ("mp3", "wav", "flac", "m4a", "ogg", "opus", "aac", "webm")
 
 # Maps YouTube video id -> file name inside the download folder.  Keeping
 # this lets the app use readable title-based file names while still finding
@@ -107,7 +108,7 @@ class YouTubeDownloader:
         audio_quality: str = "128",
     ) -> None:
         self.download_path = download_path
-        self.audio_format = audio_format
+        self.audio_format = (audio_format or "mp3").lower()
         self.audio_quality = str(audio_quality or "128")
         os.makedirs(download_path, exist_ok=True)
         self._lock = threading.Lock()
@@ -266,16 +267,17 @@ class YouTubeDownloader:
                 "outtmpl": outtmpl,
                 "windowsfilenames": True,
                 "progress_hooks": [_progress_hook],
-                "postprocessor_hooks": [_postprocessor_hook],
-                "postprocessors": [
-                    {
-                        "key": "FFmpegExtractAudio",
-                        "preferredcodec": self.audio_format,
-                        "preferredquality": self.audio_quality,
-                    }
-                ],
             }
         )
+        if self.audio_format != "original":
+            opts["postprocessor_hooks"] = [_postprocessor_hook]
+            opts["postprocessors"] = [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": self.audio_format,
+                    "preferredquality": self.audio_quality,
+                }
+            ]
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:

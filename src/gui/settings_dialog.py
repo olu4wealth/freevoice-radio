@@ -113,9 +113,23 @@ class SettingsDialog(QDialog):
         fmt_grp = QGroupBox("Audio Format")
         fmt_v = QVBoxLayout(fmt_grp)
         self.format_combo = QComboBox()
-        self.format_combo.addItems(["mp3", "wav", "flac", "m4a"])
+        for label, value in (
+            ("Original (no conversion)", "original"),
+            ("mp3", "mp3"),
+            ("wav", "wav"),
+            ("flac", "flac"),
+            ("m4a", "m4a"),
+        ):
+            self.format_combo.addItem(label, value)
         fmt_v.addWidget(QLabel("Format for downloaded/converted audio:"))
         fmt_v.addWidget(self.format_combo)
+        fmt_hint = QLabel(
+            "Original keeps YouTube's Opus/M4A audio and skips FFmpeg "
+            "conversion, so playback starts faster. Existing MP3 files are "
+            "not changed."
+        )
+        fmt_hint.setWordWrap(True)
+        fmt_v.addWidget(fmt_hint)
         v.addWidget(fmt_grp)
 
         qual_grp = QGroupBox("MP3 Quality")
@@ -235,7 +249,8 @@ class SettingsDialog(QDialog):
         self.volume_slider.setValue(cfg.volume)
         yt_map = {"download": 0, "stream": 1}
         self.youtube_mode_combo.setCurrentIndex(yt_map.get(cfg.youtube_mode, 0))
-        self.format_combo.setCurrentText(cfg.audio_format)
+        index = self.format_combo.findData(cfg.audio_format)
+        self.format_combo.setCurrentIndex(index if index >= 0 else 0)
         self.quality_combo.setCurrentText(cfg.audio_quality)
         self.download_path_edit.setText(cfg.download_path or "")
         theme_map = {"dark": 0, "light": 1, "system": 2}
@@ -260,7 +275,7 @@ class SettingsDialog(QDialog):
         cfg.volume = self.volume_slider.value()
         yt_map = {0: "download", 1: "stream"}
         cfg.youtube_mode = yt_map[self.youtube_mode_combo.currentIndex()]
-        cfg.audio_format = self.format_combo.currentText()
+        cfg.audio_format = self.format_combo.currentData() or "mp3"
         cfg.audio_quality = self.quality_combo.currentText()
         cfg.download_path = self.download_path_edit.text() or "downloads"
         theme_map = {0: "dark", 1: "light", 2: "system"}
