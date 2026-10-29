@@ -34,6 +34,7 @@ class ChannelsDialog(QDialog):
         self.config = config
         self.fetch_url: Optional[str] = None
         self.video_url: Optional[str] = None
+        self.live_url: Optional[str] = None
         self.setWindowTitle("Manage YouTube Channels")
         self.resize(720, 420)
         self._build_ui()
@@ -45,7 +46,7 @@ class ChannelsDialog(QDialog):
         hint = QLabel(
             "Enabled channels are polled by the background scheduler. "
             "Browse Videos… fetches the latest list so you can pick which "
-            "videos to queue."
+            "videos to queue. Play Live opens the channel's live broadcast."
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -67,9 +68,12 @@ class ChannelsDialog(QDialog):
         remove_btn.clicked.connect(self._remove_selected)
         fetch_btn = QPushButton("Browse Videos…")
         fetch_btn.clicked.connect(self._fetch_now)
+        live_btn = QPushButton("Play Live")
+        live_btn.clicked.connect(self._play_live)
         buttons.addWidget(add_btn)
         buttons.addWidget(remove_btn)
         buttons.addWidget(fetch_btn)
+        buttons.addWidget(live_btn)
         buttons.addStretch()
         layout.addLayout(buttons)
 
@@ -190,6 +194,19 @@ class ChannelsDialog(QDialog):
             return
         self._save()
         self.fetch_url = url
+        self.accept()
+
+    def _play_live(self) -> None:
+        rows = sorted({index.row() for index in self.table.selectedIndexes()})
+        if not rows:
+            QMessageBox.information(self, "Channel", "Select a channel first.")
+            return
+        row = rows[0]
+        url = self.table.item(row, 1).data(Qt.ItemDataRole.UserRole)
+        if not url:
+            return
+        self._save()
+        self.live_url = url
         self.accept()
 
     # ------------------------------------------------------------------

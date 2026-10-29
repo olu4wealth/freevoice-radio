@@ -8,6 +8,7 @@ everything plays from local files or downloaded audio on your PC.
 
 - **YouTube audio playback** — Download audio-only from YouTube, originally or converted
 - **Original audio mode** — Keeps YouTube's Opus/M4A stream and skips FFmpeg conversion
+- **Live YouTube audio** — Play a live video or channel directly via HLS, with reconnect
 - **Local audio playback** — Play MP3, WAV, FLAC, M4A, OGG, AAC from any folder
 - **Continuous loop** — Loop All / Loop One / Shuffle / Off modes
 - **Channel-based playlist updates** — Add YouTube channels; app queues their latest videos automatically
@@ -197,6 +198,26 @@ Windows launches it as `"…\Freevoice Radio.exe" --minimized`, so it starts
 hidden in the tray and, if Autoplay is on, resumes the last track and position.
 Turning the checkbox off removes the entry.
 
+### Live streams
+
+**Channel → Play YouTube Live…** (or the **Live** button) accepts a live video
+URL or a channel URL (`@handle`, `/channel/UC…`, `/c/…`, `/user/…`). A prefix
+of `/live` is added automatically for channel URLs.
+
+- **Channel → Manage Channels… → Play Live** opens the selected channel's
+  `/live` broadcast.
+- The live stream is played **directly from YouTube's HLS audio**, not
+  downloaded as a file. Only a small rolling buffer is kept.
+- The now-playing card shows **● LIVE**; seeking, previous/next, loop and
+  shuffle are disabled while live.
+- Play/Pause and the volume slider control the live player.
+- If the stream stalls or the manifest expires, the app re-resolves and
+  reconnects automatically (up to two attempts), then returns to the playlist.
+- Stopping live returns to the paused radio track/position.
+
+Live audio uses roughly **58 MB per hour** at 128 kbps; it does not use the
+download folder or MP3 quality setting.
+
 ### Streaming watchdog
 
 While a **stream** track (YouTube mode = Stream) is playing, the app checks the
@@ -262,7 +283,8 @@ freevoice-radio/
     ├── selftest.py         # Playback smoke tests
     ├── audio/
     │   ├── engine.py       # Playback engine (loop, crossfade, silence, streams)
-    │   └── backends.py     # QtMultimedia streaming backend + crossfade
+    │   ├── backends.py     # QtMultimedia streaming backend + crossfade
+    │   └── live_player.py  # HLS live audio player
     ├── gui/
     │   ├── main_window.py  # Main window, tray, controls, queue dock
     │   ├── channels_dialog.py  # Channel manager (enable/remove/browse)
@@ -272,7 +294,9 @@ freevoice-radio/
     ├── youtube/
     │   ├── downloader.py   # yt-dlp integration (download + progress + cancel)
     │   ├── download_queue.py  # Sequential queue with cancel/retry
-    │   └── channel_scraper.py  # Fetch videos from YouTube channels
+    │   ├── channel_scraper.py  # Fetch videos from YouTube channels
+    │   ├── live.py        # Resolve live YouTube URLs
+    │   └── live_proxy.py  # Localhost HLS proxy with YouTube headers
     ├── playlist/
     │   └── __init__.py     # Playlist package
     └── scheduler/

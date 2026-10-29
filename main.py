@@ -93,6 +93,29 @@ def main() -> None:
             window.hide()
         else:
             window.show()
+
+        if "--live" in sys.argv:
+            from PyQt6.QtCore import QTimer
+
+            index = sys.argv.index("--live")
+            live_url = sys.argv[index + 1] if index + 1 < len(sys.argv) else ""
+            QTimer.singleShot(500, lambda: window._start_live(live_url))
+
+            def _report_live() -> None:
+                active = bool(window._live_active)
+                playing = bool(
+                    window._live_player and window._live_player.is_playing()
+                )
+                print(
+                    f"LIVE_TEST active={active} playing={playing} "
+                    f"title={window.title_label.text()!r} "
+                    f"onair={window.on_air_label.text()!r}"
+                )
+                window._force_quit = True
+                window._shutdown()
+                app.exit(0 if active and playing else 1)
+
+            QTimer.singleShot(30000, _report_live)
     except Exception:
         detail = traceback.format_exc()
         print(detail)

@@ -252,6 +252,20 @@ class MainWindow(QMainWindow):
         self._watchdog_stall_ticks = 0
         self._watchdog_attempts = 0
         self._watchdog_restarting = False
+        self._live_player = None
+        self._live_active = False
+        self._live_thread = None
+        self._live_info = None
+        self._live_watch_url = ""
+        self._live_pre_state = "stopped"
+        self._live_reconnect_attempts = 0
+        self._live_last_position = -1.0
+        self._live_stall_ticks = 0
+        self._live_started_at = 0.0
+        self._live_reconnecting = False
+        self._live_reconnect_scheduled = False
+        self._live_cancelled = False
+        self._live_cover_pixmap: Optional[QPixmap] = None
 
         self._engine = AudioEngine(
             download_path=self.config.download_path,
@@ -280,6 +294,7 @@ class MainWindow(QMainWindow):
         )
 
         self._build_ui()
+        self._fit_window_to_screen()
         self._connect_signals()
         self._apply_theme(config.theme)
         self._setup_tray()
@@ -330,9 +345,44 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # UI construction
     # ------------------------------------------------------------------
+    def _fit_window_to_screen(self) -> None:
+        """Size the window to the screen, accounting for Qt/Windows DPI."""
+        width, height = 960, 640
+        x = y = None
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            scale = screen.devicePixelRatio() or 1.0
+            raw_width = available.width()
+            raw_height = available.height()
+            left = available.x()
+            top = available.y()
+            try:
+                import ctypes
+
+                physical_width = int(ctypes.windll.user32.GetSystemMetrics(0))
+            except Exception:
+                physical_width = 0
+            if physical_width and abs(raw_width - physical_width) <= 4:
+                # Some Windows/Qt combinations report physical pixels here.
+                available_w = raw_width / scale
+                available_h = raw_height / scale
+                left = left / scale
+                top = top / scale
+            else:
+                available_w = float(raw_width)
+                available_h = float(raw_height)
+            width = min(960, max(600, int(available_w) - 60))
+            height = min(640, max(380, int(available_h) - 80))
+            x = int(left + max(0, (available_w - width) / 2))
+            y = int(top + max(0, (available_h - height) / 2))
+        if x is None or y is None:
+            x = y = 0
+        self.resize(width, height)
+        self.move(x, y)
+
     def _build_ui(self) -> None:
         self.setWindowTitle("Freevoice Radio")
-        self.resize(960, 640)
         self.setAcceptDrops(True)
 
         central = QWidget()
@@ -378,6 +428,10 @@ class MainWindow(QMainWindow):
         self.btn_add_url.triggered.connect(self._add_youtube_url_dialog)
         channel_menu.addAction(self.btn_add_url)
 
+        live_action = QAction("Play YouTube Live…", self)
+        live_action.triggered.connect(self._play_live_dialog)
+        channel_menu.addAction(live_action)
+
         channel_menu.addSeparator()
 
         settings_menu = menubar.addMenu("Settings")
@@ -421,7 +475,16 @@ class MainWindow(QMainWindow):
         self.on_air_label.setAlignment(
             Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight
         )
-        np_layout.addWidget(self.on_air_label)
+        right_layout = QVBoxLayout()
+        right_layout.addWidget(self.on_air_label)
+        self.btn_live = QPushButton("Live")
+        self.btn_live.setToolTip("Play a YouTube live stream")
+        self.btn_live.clicked.connect(self._on_live_button)
+        right_layout.addWidget(
+            self.btn_live, alignment=Qt.AlignmentFlag.AlignRight
+        )
+        right_layout.addStretch()
+        np_layout.addLayout(right_layout)
 
         layout.addWidget(self.now_playing_card)
 
@@ -1250,7 +1313,9 @@ class MainWindow(QMainWindow):
 
         dialog = ChannelsDialog(self.config, self)
         dialog.exec()
-        if dialog.video_url:
+        if dialog.live_url:
+            self._start_live(dialog.live_url)
+        elif dialog.video_url:
             self._add_youtube_url(dialog.video_url)
         elif dialog.fetch_url:
             self._start_channel_fetch(dialog.fetch_url)
@@ -1367,6 +1432,18 @@ class MainWindow(QMainWindow):
         if self._shut_down:
             return
         self._shut_down = True
+        self._live_cancelled = True
+        self._live_active = False
+        if self._live_player is not None:
+            try:
+                self._live_player.stop()
+            except Exception:
+                traceback.print_exc()
+        if self._live_thread is not None:
+            try:
+                self._live_thread.wait(3000)
+            except RuntimeError:
+                pass
         try:
             self._download_queue.stop()
         except Exception:
@@ -1418,6 +1495,16 @@ class MainWindow(QMainWindow):
     # Playback controls
     # ------------------------------------------------------------------
     def _toggle_playback(self) -> None:
+        if self._live_active:
+            if self._live_player is not None:
+                self._live_player.toggle()
+            self._update_transport_buttons()
+            self._update_on_air()
+            self.statusBar().showMessage(
+                "Live paused" if self._live_player and self._live_player.is_paused()
+                else "Live playing"
+            )
+            return
         if self._engine.is_playing():
             self._engine.pause()
         elif self._engine.is_paused():
@@ -1437,6 +1524,11 @@ class MainWindow(QMainWindow):
         )
 
     def _update_play_button_text(self) -> None:
+        if self._live_active and self._live_player is not None:
+            self.btn_play.setText(
+                "Pause" if self._live_player.is_playing() else "Play"
+            )
+            return
         if self._engine.is_playing():
             self.btn_play.setText("Pause")
         else:
@@ -1454,6 +1546,28 @@ class MainWindow(QMainWindow):
         button.style().polish(button)
 
     def _update_transport_buttons(self) -> None:
+        if self._live_active:
+            for button in (
+                self.btn_prev,
+                self.btn_next,
+                self.btn_loop,
+                self.btn_shuffle,
+            ):
+                button.setEnabled(False)
+            self.btn_live.setText("Stop Live")
+            self._update_play_button_text()
+            self._update_next_label()
+            return
+
+        for button in (
+            self.btn_prev,
+            self.btn_next,
+            self.btn_loop,
+            self.btn_shuffle,
+        ):
+            button.setEnabled(True)
+        self.btn_live.setText("Live")
+
         mode = self._engine.loop_mode()
         labels = {
             "all": "Repeat All",
@@ -1504,7 +1618,16 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Shuffle on" if enabled else "Shuffle off")
 
     def _update_on_air(self) -> None:
-        if self._engine.is_playing():
+        if self._live_active:
+            playing = bool(self._live_player and self._live_player.is_playing())
+            paused = bool(self._live_player and self._live_player.is_paused())
+            if playing:
+                state, text = "live_on", "● LIVE"
+            elif paused:
+                state, text = "live_paused", "❚❚ LIVE PAUSED"
+            else:
+                state, text = "live_loading", "● LIVE"
+        elif self._engine.is_playing():
             state, text = "on", "● ON AIR"
         elif self._engine.is_paused():
             state, text = "paused", "❚❚ STANDBY"
@@ -1514,7 +1637,12 @@ class MainWindow(QMainWindow):
             return
         self._on_air_state = state
         self.on_air_label.setText(text)
-        self.on_air_label.setProperty("onair", "true" if state == "on" else "false")
+        self.on_air_label.setProperty(
+            "onair",
+            "true"
+            if state in ("on", "live_on", "live_loading")
+            else "false",
+        )
         self.on_air_label.style().unpolish(self.on_air_label)
         self.on_air_label.style().polish(self.on_air_label)
 
@@ -1591,6 +1719,9 @@ class MainWindow(QMainWindow):
 
     def _tick_ui(self) -> None:
         self._update_on_air()
+        if self._live_active:
+            self._update_live_tick()
+            return
         duration = self._engine.duration()
         position = self._engine.position()
         if self._resume_position_pending is not None and duration > 0:
@@ -1620,6 +1751,8 @@ class MainWindow(QMainWindow):
         self._update_next_label()
 
     def _on_seek_changed(self, value: int) -> None:
+        if self._live_active:
+            return
         if self._resume_position_pending is not None:
             self._resume_timer.stop()
         self._resume_position_pending = None
@@ -1634,6 +1767,9 @@ class MainWindow(QMainWindow):
 
     def _update_next_label(self) -> None:
         if not hasattr(self, "next_label"):
+            return
+        if self._live_active:
+            self.next_label.setText("Up next: Live stream")
             return
         if not (self._engine.is_playing() or self._engine.is_paused()):
             self.next_label.setText("Up next: —")
@@ -1781,6 +1917,8 @@ class MainWindow(QMainWindow):
         self._last_saved_resume = snapshot
 
     def _prev_track(self) -> None:
+        if self._live_active:
+            return
         if not self._engine.playlist():
             return
         self._resume_position_pending = None
@@ -1788,6 +1926,8 @@ class MainWindow(QMainWindow):
         self._update_transport_buttons()
 
     def _next_track(self) -> None:
+        if self._live_active:
+            return
         if not self._engine.playlist():
             return
         self._resume_position_pending = None
@@ -1795,6 +1935,10 @@ class MainWindow(QMainWindow):
         self._update_transport_buttons()
 
     def _stop_playback(self) -> None:
+        if self._live_active:
+            self._stop_live(restore_radio=True, resume_radio=False)
+            self.statusBar().showMessage("Live stream stopped")
+            return
         self._resume_position_pending = None
         self._reset_watchdog(full=True)
         self._engine.stop()
@@ -1804,12 +1948,324 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Stopped")
 
     def _play_row(self, row: int, _column: int) -> None:
+        if self._live_active:
+            self._stop_live(restore_radio=False)
         paths = self._engine.playlist()
         if 0 <= row < len(paths):
             self._resume_position_pending = None
             self._engine.play_track(paths[row])
             self._update_transport_buttons()
             self._update_on_air()
+
+    # ------------------------------------------------------------------
+    # Live streams
+    # ------------------------------------------------------------------
+    def _on_live_button(self) -> None:
+        if self._live_active:
+            self._stop_live(restore_radio=True, resume_radio=False)
+            self.statusBar().showMessage("Live stream stopped")
+        else:
+            self._play_live_dialog()
+
+    def _play_live_dialog(self) -> None:
+        text, ok = QInputDialog.getText(
+            self,
+            "Play YouTube Live",
+            "Live video or channel URL:",
+            text=self._live_watch_url or "",
+        )
+        if ok and text.strip():
+            self._start_live(text.strip())
+
+    def _start_live(self, raw_url: str) -> None:
+        from src.youtube.live import LiveResolveThread, normalize_live_url
+
+        if self._live_thread is not None and self._live_thread.isRunning():
+            self.statusBar().showMessage("A live stream check is already running")
+            return
+        url = normalize_live_url(raw_url)
+        if not url:
+            self.statusBar().showMessage("Enter a YouTube live or channel URL")
+            return
+        if self._live_active:
+            self._stop_live(restore_radio=True, resume_radio=False)
+        self._live_cancelled = False
+        self._live_watch_url = url
+        self._live_reconnect_attempts = 0
+        self._live_reconnecting = False
+        self._live_reconnect_scheduled = False
+
+        thread = LiveResolveThread(url, self)
+        self._live_thread = thread
+        thread.ready.connect(self._on_live_ready)
+        thread.failed.connect(self._on_live_failed)
+        thread.finished.connect(self._on_live_thread_finished)
+        thread.start()
+        self.statusBar().showMessage("Checking for a live broadcast…")
+
+    def _on_live_thread_finished(self) -> None:
+        thread = self.sender()
+        if thread is self._live_thread:
+            self._live_thread = None
+        if thread is not None:
+            thread.deleteLater()
+
+    def _on_live_ready(self, info) -> None:
+        if self._live_cancelled or self._shut_down:
+            return
+        reconnecting = self._live_reconnecting
+        self._live_reconnecting = False
+        self._live_reconnect_scheduled = False
+        self._live_info = info
+        self._live_watch_url = info.watch_url or self._live_watch_url
+        self._begin_live(info, reconnect=reconnecting)
+
+    def _on_live_failed(self, message: str) -> None:
+        if self._live_cancelled or self._shut_down:
+            return
+        if self._live_active:
+            self._live_reconnecting = False
+            self._live_reconnect_scheduled = False
+            self._schedule_live_reconnect()
+            return
+        self.statusBar().showMessage(message)
+        QMessageBox.warning(self, "YouTube Live", message)
+
+    def _ensure_live_player(self) -> None:
+        if self._live_player is not None:
+            return
+        from src.audio.live_player import LivePlayer
+
+        player = LivePlayer(self)
+        player.state_changed.connect(self._on_live_state)
+        player.error.connect(self._on_live_error)
+        player.ended.connect(self._on_live_ended)
+        self._live_player = player
+
+    def _begin_live(self, info, reconnect: bool = False) -> None:
+        if not reconnect:
+            if self._engine.is_playing():
+                self._live_pre_state = "playing"
+                self._engine.pause()
+            elif self._engine.is_paused():
+                self._live_pre_state = "paused"
+            else:
+                self._live_pre_state = "stopped"
+            self._live_reconnect_attempts = 0
+
+        self._ensure_live_player()
+        if self._live_player is None:
+            return
+        self._live_active = True
+        self._live_info = info
+        self._live_started_at = time.time()
+        self._live_last_position = -1.0
+        self._live_stall_ticks = 0
+        self._live_cover_pixmap = None
+        if info.thumbnail_data:
+            pixmap = QPixmap()
+            if pixmap.loadFromData(info.thumbnail_data):
+                self._live_cover_pixmap = pixmap
+        self._live_player.set_volume(self.config.volume)
+        try:
+            self._live_player.play_info(info)
+        except Exception as exc:
+            self._live_active = False
+            QMessageBox.warning(
+                self, "YouTube Live", f"Could not start live playback:\n{exc}"
+            )
+            return
+        self._update_live_ui()
+        self.statusBar().showMessage(f"● LIVE — {info.title}")
+
+    def _update_live_ui(self) -> None:
+        info = self._live_info
+        if info is None:
+            return
+        self.title_label.setText(info.title)
+        self.artist_label.setText(info.artist or "YouTube Live")
+        self.source_label.setText("Source: YouTube Live")
+        if self._live_cover_pixmap is not None:
+            self.cover_label.setText("")
+            self.cover_label.setPixmap(
+                self._live_cover_pixmap.scaled(
+                    100,
+                    100,
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        else:
+            self.cover_label.clear()
+            self.cover_label.setText("LIVE")
+        self.setWindowTitle(f"{info.title} — LIVE — Freevoice Radio")
+        self.tray.setToolTip("Freevoice Radio — LIVE")
+        self.seek_slider.setEnabled(False)
+        self.seek_slider.blockSignals(True)
+        self.seek_slider.setRange(0, 0)
+        self.seek_slider.setValue(0)
+        self.seek_slider.blockSignals(False)
+        self.time_label.setText("● LIVE")
+        self._update_transport_buttons()
+        self._update_on_air()
+
+    def _on_live_state(self) -> None:
+        if not self._live_active:
+            return
+        self._update_play_button_text()
+        self._update_on_air()
+
+    def _on_live_error(self, _message: str) -> None:
+        if self._live_active:
+            self._schedule_live_reconnect()
+
+    def _on_live_ended(self) -> None:
+        if self._live_active and not self._live_reconnecting:
+            self._stop_live(
+                restore_radio=True,
+                resume_radio=True,
+                message="Live broadcast ended",
+            )
+
+    def _schedule_live_reconnect(self) -> None:
+        if (
+            not self._live_active
+            or self._live_reconnect_scheduled
+            or self._live_reconnecting
+        ):
+            return
+        if self._live_reconnect_attempts >= 2:
+            self._stop_live(
+                restore_radio=True,
+                resume_radio=True,
+                message="Live stream lost — returning to the playlist",
+            )
+            return
+        self._live_reconnect_attempts += 1
+        self._live_reconnect_scheduled = True
+        self._live_reconnecting = True
+        if self._live_player is not None:
+            self._live_player.stop()
+        self.statusBar().showMessage("Live stream interrupted — reconnecting…")
+        QTimer.singleShot(1200, self._reconnect_live)
+
+    def _reconnect_live(self) -> None:
+        self._live_reconnect_scheduled = False
+        if not self._live_active or self._live_cancelled or self._shut_down:
+            return
+        if self._live_thread is not None and self._live_thread.isRunning():
+            return
+        from src.youtube.live import LiveResolveThread
+
+        thread = LiveResolveThread(self._live_watch_url, self)
+        self._live_thread = thread
+        thread.ready.connect(self._on_live_ready)
+        thread.failed.connect(self._on_live_failed)
+        thread.finished.connect(self._on_live_thread_finished)
+        thread.start()
+
+    def _check_live_health(self) -> None:
+        if not self._live_active or self._live_player is None:
+            self._live_last_position = -1.0
+            self._live_stall_ticks = 0
+            return
+        if self._live_player.is_paused():
+            self._live_last_position = -1.0
+            self._live_stall_ticks = 0
+            return
+        if not self._live_player.is_playing():
+            if time.time() - self._live_started_at > 20:
+                self._schedule_live_reconnect()
+            return
+        position = self._live_player.position()
+        if self._live_last_position < 0:
+            self._live_last_position = position
+            return
+        if position > self._live_last_position + 0.5:
+            self._live_last_position = position
+            self._live_stall_ticks = 0
+            if time.time() - self._live_started_at > 30:
+                self._live_reconnect_attempts = 0
+        elif position < self._live_last_position - 2:
+            self._live_last_position = position
+            self._live_stall_ticks = 0
+        else:
+            self._live_stall_ticks += 1
+        if (
+            self._live_stall_ticks >= 20
+            and time.time() - self._live_started_at > 20
+        ):
+            self._live_stall_ticks = 0
+            self._schedule_live_reconnect()
+        elif time.time() - self._live_started_at > 4 * 3600:
+            self._schedule_live_reconnect()
+
+    def _update_live_tick(self) -> None:
+        self.seek_slider.setEnabled(False)
+        self.seek_slider.blockSignals(True)
+        self.seek_slider.setRange(0, 0)
+        self.seek_slider.setValue(0)
+        self.seek_slider.blockSignals(False)
+        self.time_label.setText("● LIVE")
+        self._update_play_button_text()
+        self._check_live_health()
+
+    def _stop_live(
+        self,
+        restore_radio: bool = True,
+        resume_radio: bool = False,
+        message: str = "",
+    ) -> None:
+        if not self._live_active:
+            return
+        self._live_active = False
+        self._live_cancelled = True
+        self._live_reconnecting = False
+        self._live_reconnect_scheduled = False
+        if self._live_player is not None:
+            self._live_player.stop()
+        self._live_info = None
+        self._live_cover_pixmap = None
+        if restore_radio:
+            if resume_radio and self._live_pre_state == "playing":
+                self._engine.resume()
+            self._restore_radio_ui()
+        if message:
+            self.statusBar().showMessage(message, 8000)
+
+    def _restore_radio_ui(self) -> None:
+        self.btn_live.setText("Live")
+        for button in (
+            self.btn_prev,
+            self.btn_next,
+            self.btn_loop,
+            self.btn_shuffle,
+        ):
+            button.setEnabled(True)
+        current = self._engine.current_track()
+        if current:
+            meta = self._metadata.get(current) or self._local_metadata(current)
+            title = meta.get("title") or self._title_for(current)
+            self.title_label.setText(title)
+            self.artist_label.setText(meta.get("artist") or "Unknown")
+            source = meta.get("source") or "local"
+            self.source_label.setText(
+                "Source: YouTube" if source == "youtube"
+                else f"Source: {source}"
+            )
+            self.setWindowTitle(f"{title} — Freevoice Radio")
+            self._update_cover_label(current)
+        else:
+            self.title_label.setText("No track playing")
+            self.artist_label.setText("Freevoice Radio")
+            self.source_label.setText("Source: —")
+            self.cover_label.clear()
+            self.cover_label.setText("No\nCover")
+            self.setWindowTitle("Freevoice Radio")
+        self.tray.setToolTip("Freevoice Radio — on air")
+        self._update_transport_buttons()
+        self._update_on_air()
+        self._tick_ui()
 
     def _selected_paths(self) -> list[str]:
         rows = sorted({index.row() for index in self.playlist_table.selectedIndexes()})
@@ -2032,6 +2488,8 @@ class MainWindow(QMainWindow):
     def _on_volume_changed(self, value: int) -> None:
         self.config.volume = value
         self._engine.set_volume(value)
+        if self._live_player is not None:
+            self._live_player.set_volume(value)
         self.config.save()
         self.statusBar().showMessage(f"Volume: {value}%")
 
