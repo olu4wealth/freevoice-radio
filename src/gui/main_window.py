@@ -2532,7 +2532,8 @@ class MainWindow(QMainWindow):
             "id": url,
             "name": url,
             "url": url,
-            "enabled": True,
+            "enabled": False,
+            "auto_download": False,
             "last_checked": None,
             "max_videos_per_fetch": self.config.get("max_videos_per_fetch", 10),
         }

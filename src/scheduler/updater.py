@@ -87,12 +87,18 @@ class ChannelUpdater:
         if not self.config.scheduler_enabled:
             return
         for channel in list(self.config.channels):
+            if not channel.get("auto_download", False):
+                continue
             if not channel.get("enabled", False):
                 continue
+            if self._stop_event.is_set():
+                break
             self._poll_channel(channel)
         self.config.save()
 
     def _poll_channel(self, channel: dict) -> None:
+        if not channel.get("auto_download", False):
+            return
         channel_url = channel.get("url") or ""
         if not channel_url:
             return

@@ -219,10 +219,16 @@ class SettingsDialog(QDialog):
         close_h.addStretch()
         v.addLayout(close_h)
 
-        sched_grp = QGroupBox("Channel Auto-Update")
+        sched_grp = QGroupBox("Automatic Channel Downloads")
         sched_v = QVBoxLayout(sched_grp)
-        self.sched_chk = QCheckBox("Enable automatic channel polling")
+        self.sched_chk = QCheckBox("Enable the background scheduler")
         sched_v.addWidget(self.sched_chk)
+        sched_hint = QLabel(
+            "Auto-download is off by default for every channel. Tick "
+            "Auto-download in Manage Channels for the channels you want."
+        )
+        sched_hint.setWordWrap(True)
+        sched_v.addWidget(sched_hint)
         sched_h = QHBoxLayout()
         sched_h.addWidget(QLabel("Check every (minutes):"))
         self.sched_spin = QSpinBox()

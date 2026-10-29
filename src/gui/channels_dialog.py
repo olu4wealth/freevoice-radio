@@ -35,6 +35,8 @@ class ChannelsDialog(QDialog):
         self.fetch_url: Optional[str] = None
         self.video_url: Optional[str] = None
         self.live_url: Optional[str] = None
+        self._loading = False
+        self._saving = False
         self.setWindowTitle("Manage YouTube Channels")
         self.resize(720, 420)
         self._build_ui()
@@ -44,21 +46,23 @@ class ChannelsDialog(QDialog):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         hint = QLabel(
-            "Enabled channels are polled by the background scheduler. "
-            "Browse Videos… fetches the latest list so you can pick which "
-            "videos to queue. Play Live opens the channel's live broadcast."
+            "Auto-download is off by default. Tick it only for channels whose "
+            "new videos should download automatically. Browse Videos… fetches "
+            "the latest list so you can choose manually; Play Live opens the "
+            "channel's live broadcast."
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(
-            ["Enabled", "Channel URL", "Last checked", "Videos"]
+            ["Auto-download", "Channel URL", "Last checked", "Videos"]
         )
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self.table, stretch=1)
 
         buttons = QHBoxLayout()
@@ -78,11 +82,12 @@ class ChannelsDialog(QDialog):
         layout.addLayout(buttons)
 
         box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        box.rejected.connect(self.reject)
+        box.rejected.connect(self._close)
         layout.addWidget(box)
 
     # ------------------------------------------------------------------
     def _reload(self) -> None:
+        self._loading = True
         channels = self.config.channels
         self.table.setRowCount(len(channels))
         for row, channel in enumerate(channels):
@@ -92,7 +97,7 @@ class ChannelsDialog(QDialog):
             )
             enabled.setCheckState(
                 Qt.CheckState.Checked
-                if channel.get("enabled", True)
+                if channel.get("auto_download", False)
                 else Qt.CheckState.Unchecked
             )
             self.table.setItem(row, 0, enabled)
@@ -114,6 +119,7 @@ class ChannelsDialog(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(
             1, QHeaderView.ResizeMode.Stretch
         )
+        self._loading = False
 
     @staticmethod
     def _format_checked(value) -> str:
@@ -127,17 +133,51 @@ class ChannelsDialog(QDialog):
 
     # ------------------------------------------------------------------
     def _save(self) -> None:
-        channels = self.config.channels
-        for row, channel in enumerate(channels):
-            enabled_item = self.table.item(row, 0)
-            spin = self.table.cellWidget(row, 3)
-            if enabled_item is not None:
-                channel["enabled"] = (
-                    enabled_item.checkState() == Qt.CheckState.Checked
-                )
-            if isinstance(spin, QSpinBox):
-                channel["max_videos_per_fetch"] = spin.value()
-        self.config.save()
+        if self._saving:
+            return
+        self._saving = True
+        try:
+            channels = self.config.channels
+            for row, channel in enumerate(channels):
+                auto_item = self.table.item(row, 0)
+                spin = self.table.cellWidget(row, 3)
+                if auto_item is not None:
+                    wanted = (
+                        auto_item.checkState() == Qt.CheckState.Checked
+                    )
+                    if wanted and not channel.get("auto_download", False):
+                        answer = QMessageBox.question(
+                            self,
+                            "Automatic downloads",
+                            "Download new videos from this channel "
+                            "automatically?\n\nThis uses network and disk space "
+                            "without asking again.",
+                            QMessageBox.StandardButton.Yes
+                            | QMessageBox.StandardButton.No,
+                            QMessageBox.StandardButton.No,
+                        )
+                        if answer != QMessageBox.StandardButton.Yes:
+                            wanted = False
+                            self._loading = True
+                            auto_item.setCheckState(Qt.CheckState.Unchecked)
+                            self._loading = False
+                    channel["auto_download"] = wanted
+                    channel["enabled"] = wanted
+                if isinstance(spin, QSpinBox):
+                    channel["max_videos_per_fetch"] = spin.value()
+            self.config.save()
+        finally:
+            self._saving = False
+
+    def _on_item_changed(self, item: QTableWidgetItem) -> None:
+        if self._loading or self._saving:
+            return
+        if item.column() == 0:
+            self._save()
+
+    def _close(self) -> None:
+        self._save()
+        self.reject()
 
     def _add_channel(self) -> None:
         url, ok = QInputDialog.getText(
@@ -160,7 +200,8 @@ class ChannelsDialog(QDialog):
                 "id": url,
                 "name": url,
                 "url": url,
-                "enabled": True,
+                "enabled": False,
+                "auto_download": False,
                 "last_checked": None,
                 "max_videos_per_fetch": 10,
             }

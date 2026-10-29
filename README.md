@@ -11,9 +11,9 @@ everything plays from local files or downloaded audio on your PC.
 - **Live YouTube audio** — Play a live video or channel directly via HLS, with reconnect
 - **Local audio playback** — Play MP3, WAV, FLAC, M4A, OGG, AAC from any folder
 - **Continuous loop** — Loop All / Loop One / Shuffle / Off modes
-- **Channel-based playlist updates** — Add YouTube channels; app queues their latest videos automatically
+- **Channel-based playlist updates** — Add YouTube channels; download the videos you pick
 - **Download queue** — Sequential downloads with cancel, retry, remove and clear
-- **Background scheduler** — Polls enabled channels on a configurable interval (default: 60 min)
+- **Background scheduler** — Optional, per-channel auto-download on a configurable interval
 - **Gapless playback** — Seamless transitions between tracks (toggleable)
 - **Crossfade** — Fade between tracks (toggleable, configurable seconds)
 - **Silence between tracks** — Insert silence gaps (toggleable, configurable seconds)
@@ -153,17 +153,17 @@ are.
 
 Channel → Manage Channels… lists every configured channel with:
 
-- **Enabled** — whether the background scheduler polls it
+- **Auto-download** — off by default. Ticking it asks for confirmation and
+  then downloads new videos from that channel automatically
 - **Channel URL**
 - **Last checked** timestamp
 - **Videos** — how many recent videos to pull per poll
 
 From there you can **Add Channel…**, **Remove Selected**, or **Browse Videos…**
 to fetch the channel's latest list and tick exactly which videos to queue.
-Downloaded videos are shown as such and cannot be selected twice. The
-background scheduler still auto-queues new videos (up to the channel's
-**Videos** limit) without opening the picker, so unattended updates keep
-working.
+Downloaded videos are shown as such and cannot be selected twice. New channels
+start with **Auto-download off**; the background scheduler only downloads from
+channels you explicitly opted in, up to the channel's **Videos** limit.
 
 ### Closing the app
 
@@ -265,6 +265,7 @@ All settings are saved to `config.json` in the project folder. The Settings dial
 | Theme | Dark, Light, System |
 | System tray | Close button: Ask / Minimize to tray / Close app |
 | Scheduler | On / Off + interval (minutes) |
+| Auto-download | Per channel, **off by default**; ticking asks for confirmation |
 
 ## Project Structure
 

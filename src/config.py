@@ -58,6 +58,12 @@ class Config:
                 if self._data.get("loop_mode") == "shuffle":
                     self._data["loop_mode"] = "loop_all"
                     self._data["shuffle"] = True
+                # Auto-download is opt-in.  Old channels were polled and
+                # downloaded automatically; require an explicit choice now.
+                for channel in self._data.get("channels", []):
+                    if "auto_download" not in channel:
+                        channel["auto_download"] = False
+                        channel["enabled"] = False
             except (json.JSONDecodeError, OSError, ValueError):
                 self._data = dict(DEFAULT_CONFIG)
 
