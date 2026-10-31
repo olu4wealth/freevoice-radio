@@ -8,6 +8,7 @@ everything plays from local files or downloaded audio on your PC.
 
 - **YouTube audio playback** — Download audio-only from YouTube, originally or converted
 - **Original audio mode** — Keeps YouTube's Opus/M4A stream and skips FFmpeg conversion
+- **Updatable yt-dlp** — Download the latest extractor from PyPI without rebuilding the app
 - **Live YouTube audio** — Play a live video or channel directly via HLS, with reconnect
 - **Local audio playback** — Play MP3, WAV, FLAC, M4A, OGG, AAC from any folder
 - **Continuous loop** — Loop All / Loop One / Shuffle / Off modes
@@ -149,6 +150,23 @@ Settings → YouTube → **Format**. **MP3 Quality** only applies when convertin
 to MP3. Existing files are never re-encoded — MP3 files stay exactly as they
 are.
 
+### yt-dlp updates
+
+Settings → YouTube → **yt-dlp Extractor** shows the current version and a
+**Check for Updates** button.
+
+- It queries PyPI for the latest `yt-dlp` wheel.
+- The wheel is downloaded over HTTPS and verified against PyPI's SHA-256.
+- It is extracted into a staging folder (`vendor.next`) — the running app is
+  not modified.
+- On the next launch the staged package is activated before any download or
+  live-stream code runs.
+- If the external package cannot be imported, the bundled copy is used as a
+  fallback.
+
+The update applies to new channel downloads, URL downloads, metadata and live
+resolution. Restart Freevoice Radio after updating.
+
 ### Managing channels
 
 Channel → Manage Channels… lists every configured channel with:
@@ -253,6 +271,7 @@ All settings are saved to `config.json` in the project folder. The Settings dial
 |---------|---------|
 | YouTube mode | Download (save to disk) / Stream (temp file) |
 | Audio format | Original (no conversion), mp3, wav, flac, m4a |
+| yt-dlp | Current version + Check for Updates (restart to activate) |
 | MP3 quality | 96 / 128 / 160 / 192 / 256 / 320 kbps (conversion only) |
 | Loop mode | Loop All, Loop One, Off |
 | Start with Windows | Off by default; launches minimized to tray at login |
@@ -281,6 +300,7 @@ freevoice-radio/
     ├── config.py           # Configuration manager
     ├── single_instance.py  # Lock/socket name for one running app
     ├── startup.py          # Optional HKCU Windows startup entry
+    ├── ytdlp_runtime.py    # Load an external updated yt-dlp package
     ├── selftest.py         # Playback smoke tests
     ├── audio/
     │   ├── engine.py       # Playback engine (loop, crossfade, silence, streams)
@@ -297,7 +317,8 @@ freevoice-radio/
     │   ├── download_queue.py  # Sequential queue with cancel/retry
     │   ├── channel_scraper.py  # Fetch videos from YouTube channels
     │   ├── live.py        # Resolve live YouTube URLs
-    │   └── live_proxy.py  # Localhost HLS proxy with YouTube headers
+    │   ├── live_proxy.py  # Localhost HLS proxy with YouTube headers
+    │   └── updater.py     # Download/stage latest yt-dlp wheel
     ├── playlist/
     │   └── __init__.py     # Playlist package
     └── scheduler/

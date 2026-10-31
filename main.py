@@ -19,8 +19,8 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from src.app_paths import app_dir, config_path, resource_dir
 from src.config import Config
-from src.gui.main_window import MainWindow
 from src.single_instance import instance_name, lock_path
+from src.ytdlp_runtime import prepare_ytdlp
 
 LOG_NAME = "freevoice.log"
 
@@ -84,6 +84,10 @@ def main() -> None:
             socket.disconnectFromServer()
         sys.exit(0)
 
+    # Activate a staged yt-dlp update only in the sole running instance.
+    prepare_ytdlp()
+    from src.gui.main_window import MainWindow
+
     try:
         config = Config(config_path=config_path())
         config.save()  # materialise config.json next to the exe on first run
@@ -131,6 +135,27 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    if "--ytdlp-version" in sys.argv:
+        _setup_logging()
+        prepare_ytdlp()
+        from src.ytdlp_runtime import current_ytdlp_info
+
+        version, path, external = current_ytdlp_info()
+        print(f"YTDLP version={version} external={external} path={path}")
+        sys.exit(0)
+
+    if "--update-ytdlp" in sys.argv:
+        _setup_logging()
+        prepare_ytdlp()
+        from src.youtube.updater import install_update
+
+        result = install_update()
+        print(
+            f"YTDLP_UPDATE version={result.version} updated={result.updated} "
+            f"error={result.error} message={result.message}"
+        )
+        sys.exit(1 if result.error else 0)
+
     if "--selftest" in sys.argv or "--selftest-loop" in sys.argv:
         _setup_logging()
         from src.selftest import run_loop_test, run_selftest

@@ -11,17 +11,31 @@ from PyQt6.QtWidgets import (
     QFileDialog, QDialogButtonBox, QGroupBox, QSpinBox, QLineEdit,
     QMessageBox,
 )
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import Qt, QUrl, QThread, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 
 from src.config import Config
 from src.startup import is_startup_enabled, set_startup_enabled
+from src.youtube.updater import UpdateResult, install_update
+from src.ytdlp_runtime import current_ytdlp_info
+
+
+class _YtDlpUpdateThread(QThread):
+    done = pyqtSignal(object)
+
+    def run(self) -> None:
+        try:
+            result = install_update()
+        except Exception as exc:
+            result = UpdateResult("", False, f"Update failed: {exc}", True)
+        self.done.emit(result)
 
 
 class SettingsDialog(QDialog):
     def __init__(self, config: Config, parent=None) -> None:
         super().__init__(parent)
         self.config = config
+        self._ytdlp_thread = None
         self.setWindowTitle("Settings — Freevoice Radio")
         self.setModal(True)
         self.resize(520, 480)
@@ -166,6 +180,23 @@ class SettingsDialog(QDialog):
         hint.setWordWrap(True)
         v.addWidget(hint)
 
+        ytdlp_grp = QGroupBox("yt-dlp Extractor")
+        ytdlp_v = QVBoxLayout(ytdlp_grp)
+        version, path, external = current_ytdlp_info()
+        self.ytdlp_version_label = QLabel(
+            f"Installed: {version}" + (" (external)" if external else " (bundled)")
+        )
+        self.ytdlp_version_label.setWordWrap(True)
+        self.ytdlp_version_label.setToolTip(path)
+        ytdlp_v.addWidget(self.ytdlp_version_label)
+        self.ytdlp_button = QPushButton("Check for Updates")
+        self.ytdlp_button.clicked.connect(self._update_ytdlp)
+        ytdlp_v.addWidget(self.ytdlp_button)
+        self.ytdlp_status = QLabel("")
+        self.ytdlp_status.setWordWrap(True)
+        ytdlp_v.addWidget(self.ytdlp_status)
+        v.addWidget(ytdlp_grp)
+
         v.addStretch()
         return w
 
@@ -242,6 +273,51 @@ class SettingsDialog(QDialog):
         v.addStretch()
         return w
 
+    def _update_ytdlp(self) -> None:
+        if self._ytdlp_thread is not None and self._ytdlp_thread.isRunning():
+            return
+        self.ytdlp_button.setEnabled(False)
+        self.ytdlp_status.setText("Checking PyPI…")
+        thread = _YtDlpUpdateThread(self)
+        self._ytdlp_thread = thread
+        thread.done.connect(self._on_ytdlp_done)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+
+    def _on_ytdlp_done(self, result: UpdateResult) -> None:
+        self._ytdlp_thread = None
+        self.ytdlp_button.setEnabled(True)
+        self.ytdlp_status.setText(result.message)
+        if result.error:
+            QMessageBox.warning(self, "yt-dlp Update", result.message)
+        elif result.updated:
+            self.ytdlp_version_label.setText(
+                f"Installed: {current_ytdlp_info()[0]} — "
+                f"restart to use {result.version}"
+            )
+            QMessageBox.information(self, "yt-dlp Update", result.message)
+        else:
+            QMessageBox.information(self, "yt-dlp Update", result.message)
+
+    def _update_busy(self) -> bool:
+        if self._ytdlp_thread is not None and self._ytdlp_thread.isRunning():
+            QMessageBox.information(
+                self, "yt-dlp Update", "The update check is still running."
+            )
+            return True
+        return False
+
+    def reject(self) -> None:
+        if self._update_busy():
+            return
+        super().reject()
+
+    def closeEvent(self, event) -> None:  # noqa: N802 (Qt API)
+        if self._update_busy():
+            event.ignore()
+            return
+        super().closeEvent(event)
+
     def _load_from_config(self) -> None:
         cfg = self.config
         loop_map = {"loop_all": 0, "loop_one": 1, "off": 2}
@@ -269,6 +345,8 @@ class SettingsDialog(QDialog):
         self.sched_spin.setValue(cfg.scheduler_interval_minutes)
 
     def _on_accept(self) -> None:
+        if self._update_busy():
+            return
         cfg = self.config
         loop_map = {0: "loop_all", 1: "loop_one", 2: "off"}
         cfg.loop_mode = loop_map[self.loop_combo.currentIndex()]

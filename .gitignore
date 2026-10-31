@@ -38,6 +38,12 @@ freevoice.log
 freevoice.lock
 *.log
 
+# ---- Runtime yt-dlp updates ----
+vendor/
+vendor.next/
+vendor.old/
+vendor.failed/
+
 # ---- Local scratch ----
 fix_download.py
 
