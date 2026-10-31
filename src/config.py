@@ -25,6 +25,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "loop_mode": "loop_all",
     "shuffle": False,
     "autoplay": True,
+    "prevent_sleep": True,
     "gapless": True,
     "crossfade_enabled": False,
     "crossfade_seconds": 5,
@@ -164,6 +165,14 @@ class Config:
     @autoplay.setter
     def autoplay(self, value: bool) -> None:
         self._data["autoplay"] = bool(value)
+
+    @property
+    def prevent_sleep(self) -> bool:
+        return bool(self._data.get("prevent_sleep", True))
+
+    @prevent_sleep.setter
+    def prevent_sleep(self, value: bool) -> None:
+        self._data["prevent_sleep"] = bool(value)
 
     @property
     def resume_track(self) -> str:

@@ -215,6 +215,14 @@ class SettingsDialog(QDialog):
         self.autoplay_chk = QCheckBox("Start playing when Freevoice Radio opens")
         v.addWidget(self.autoplay_chk)
 
+        self.prevent_sleep_chk = QCheckBox(
+            "Prevent the computer from sleeping while audio is playing"
+        )
+        self.prevent_sleep_chk.setToolTip(
+            "Keeps Windows awake during playback; the display may still turn off."
+        )
+        v.addWidget(self.prevent_sleep_chk)
+
         self.startup_chk = QCheckBox(
             "Start Freevoice Radio with Windows (minimized to tray)"
         )
@@ -338,6 +346,7 @@ class SettingsDialog(QDialog):
         theme_map = {"dark": 0, "light": 1, "system": 2}
         self.theme_combo.setCurrentIndex(theme_map.get(cfg.theme, 0))
         self.autoplay_chk.setChecked(cfg.autoplay)
+        self.prevent_sleep_chk.setChecked(cfg.prevent_sleep)
         self.startup_chk.setChecked(is_startup_enabled())
         close_map = {"ask": 0, "tray": 1, "quit": 2}
         self.close_combo.setCurrentIndex(close_map.get(cfg.close_action, 0))
@@ -365,6 +374,7 @@ class SettingsDialog(QDialog):
         theme_map = {0: "dark", 1: "light", 2: "system"}
         cfg.theme = theme_map[self.theme_combo.currentIndex()]
         cfg.autoplay = self.autoplay_chk.isChecked()
+        cfg.prevent_sleep = self.prevent_sleep_chk.isChecked()
         close_map = {0: "ask", 1: "tray", 2: "quit"}
         cfg.close_action = close_map[self.close_combo.currentIndex()]
         cfg.scheduler_enabled = self.sched_chk.isChecked()

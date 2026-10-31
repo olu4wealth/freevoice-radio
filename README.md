@@ -9,6 +9,7 @@ everything plays from local files or downloaded audio on your PC.
 - **YouTube audio playback** — Download audio-only from YouTube, originally or converted
 - **Original audio mode** — Keeps YouTube's Opus/M4A stream and skips FFmpeg conversion
 - **Updatable yt-dlp** — Download the latest extractor from PyPI without rebuilding the app
+- **Sleep prevention** — Keeps the computer awake while radio or live audio is playing
 - **Live YouTube audio** — Play a live video or channel directly via HLS, with reconnect
 - **Local audio playback** — Play MP3, WAV, FLAC, M4A, OGG, AAC from any folder
 - **Continuous loop** — Loop All / Loop One / Shuffle / Off modes
@@ -183,6 +184,19 @@ Downloaded videos are shown as such and cannot be selected twice. New channels
 start with **Auto-download off**; the background scheduler only downloads from
 channels you explicitly opted in, up to the channel's **Videos** limit.
 
+### Sleep prevention
+
+While audio is actually playing — local tracks, downloads, streams, or a live
+broadcast — the app asks Windows to keep the system awake. It does **not**
+force the display to stay on, so the screen may still turn off normally.
+
+- Pausing or stopping playback releases the request, allowing normal sleep.
+- The setting **Prevent the computer from sleeping while audio is playing** is
+  enabled by default under Settings → General.
+- Closing the lid can still suspend the laptop according to Windows power
+  settings; this only prevents idle sleep.
+- On battery, keeping the system awake uses more power.
+
 ### Closing the app
 
 Clicking the window's close button asks what to do:
@@ -277,6 +291,7 @@ All settings are saved to `config.json` in the project folder. The Settings dial
 | Start with Windows | Off by default; launches minimized to tray at login |
 | Shuffle | On / Off |
 | Auto-start | Play when the app opens |
+| Prevent sleep | Keep the system awake while audio is playing (default on) |
 | Gapless playback | On / Off |
 | Crossfade | On / Off + seconds |
 | Silence between tracks | On / Off + seconds |
@@ -298,6 +313,7 @@ freevoice-radio/
 └── src/
     ├── app_paths.py        # Source/frozen paths + ffmpeg discovery
     ├── config.py           # Configuration manager
+    ├── power.py            # Sleep prevention while playing
     ├── single_instance.py  # Lock/socket name for one running app
     ├── startup.py          # Optional HKCU Windows startup entry
     ├── ytdlp_runtime.py    # Load an external updated yt-dlp package

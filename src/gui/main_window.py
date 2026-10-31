@@ -49,6 +49,7 @@ from PyQt6.QtNetwork import QLocalServer
 from src.app_paths import resolve_path, resource_dir
 from src.audio.engine import AUDIO_EXTENSIONS, AudioEngine
 from src.config import Config
+from src.power import SleepInhibitor
 from src.single_instance import instance_name
 from src.scheduler.updater import ChannelUpdater
 from src.youtube.channel_scraper import ChannelScraper, video_id_from_url
@@ -234,6 +235,7 @@ class MainWindow(QMainWindow):
     def __init__(self, config: Config) -> None:
         super().__init__()
         self.config = config
+        self._sleep_inhibitor = SleepInhibitor()
         self._metadata: dict[str, dict] = {}
         self._track_history: list[str] = []
         self._max_history = 50
@@ -1132,10 +1134,12 @@ class MainWindow(QMainWindow):
         self._refresh_playlist_table()
         if self._resume_position_pending is None:
             self._save_resume_state(force=True)
+        self._update_sleep_inhibitor()
 
     def _on_playback_stopped(self) -> None:
         self.btn_play.setText("▶ Play")
         self._update_on_air()
+        self._update_sleep_inhibitor()
         self._refresh_playlist_table()
 
     def _on_playback_error(self, message: str) -> None:
@@ -1432,6 +1436,7 @@ class MainWindow(QMainWindow):
         if self._shut_down:
             return
         self._shut_down = True
+        self._sleep_inhibitor.release()
         self._live_cancelled = True
         self._live_active = False
         if self._live_player is not None:
@@ -1500,6 +1505,7 @@ class MainWindow(QMainWindow):
                 self._live_player.toggle()
             self._update_transport_buttons()
             self._update_on_air()
+            self._update_sleep_inhibitor()
             self.statusBar().showMessage(
                 "Live paused" if self._live_player and self._live_player.is_paused()
                 else "Live playing"
@@ -1518,6 +1524,7 @@ class MainWindow(QMainWindow):
         self._update_on_air()
         self._refresh_playlist_table()
         self._save_resume_state(force=True)
+        self._update_sleep_inhibitor()
         self.statusBar().showMessage(
             "Paused" if self._engine.is_paused() else
             ("Playing" if self._engine.is_playing() else "Stopped")
@@ -1700,6 +1707,13 @@ class MainWindow(QMainWindow):
         self._engine.next_track()
         self.statusBar().showMessage("Stream stalled — skipping to next", 5000)
 
+    def _update_sleep_inhibitor(self) -> None:
+        if self._live_active and self._live_player is not None:
+            playing = self._live_player.is_playing()
+        else:
+            playing = self._engine.is_playing()
+        self._sleep_inhibitor.set_playing(bool(self.config.prevent_sleep and playing))
+
     def _apply_pending_resume(self) -> None:
         if self._resume_position_pending is None:
             self._resume_timer.stop()
@@ -1718,6 +1732,7 @@ class MainWindow(QMainWindow):
         )
 
     def _tick_ui(self) -> None:
+        self._update_sleep_inhibitor()
         self._update_on_air()
         if self._live_active:
             self._update_live_tick()
@@ -1943,6 +1958,7 @@ class MainWindow(QMainWindow):
         self._reset_watchdog(full=True)
         self._engine.stop()
         self._save_resume_state(force=True)
+        self._update_sleep_inhibitor()
         self.btn_play.setText("▶ Play")
         self._update_on_air()
         self.statusBar().showMessage("Stopped")
@@ -2076,6 +2092,7 @@ class MainWindow(QMainWindow):
             )
             return
         self._update_live_ui()
+        self._update_sleep_inhibitor()
         self.statusBar().showMessage(f"● LIVE — {info.title}")
 
     def _update_live_ui(self) -> None:
@@ -2114,6 +2131,7 @@ class MainWindow(QMainWindow):
             return
         self._update_play_button_text()
         self._update_on_air()
+        self._update_sleep_inhibitor()
 
     def _on_live_error(self, _message: str) -> None:
         if self._live_active:
@@ -2230,6 +2248,7 @@ class MainWindow(QMainWindow):
             if resume_radio and self._live_pre_state == "playing":
                 self._engine.resume()
             self._restore_radio_ui()
+        self._update_sleep_inhibitor()
         if message:
             self.statusBar().showMessage(message, 8000)
 
@@ -2659,6 +2678,7 @@ class MainWindow(QMainWindow):
         except OSError as exc:
             self.statusBar().showMessage(f"Download folder is not usable: {exc}")
         self.config.save()
+        self._update_sleep_inhibitor()
 
         # The tray is how a hidden radio is found again; keep it available.
         self.tray.show()
